@@ -1,0 +1,224 @@
+# =============================================================================
+# Domain: Assets — fixed-asset register + lifecycle (EMITS GL)
+# Entities: AssetCategory, Asset, AssetDepreciationEntry
+# Description: The book-basis fixed-asset register. A Category fixes the
+# depreciation method + useful life + the four GL accounts. An Asset is one
+# capitalized record with a running net book value. Activating it generates a
+# straight-line schedule (AssetDepreciationEntry rows); running depreciation posts
+# each due row (Dr Depreciation Expense · Cr Accumulated Depreciation); disposal
+# removes the asset from the books (Dr Accum.Dep + proceeds ± gain/loss · Cr Fixed
+# Asset). Single finance book. Book basis only — Indonesian golongan tax basis is a
+# backbone-tax overlay (deferred). Cross-module ids are logical FKs.
+# =============================================================================
+
+models:
+  - name: AssetCategory
+    collection: asset_categories
+    description: "Depreciation policy + GL accounts for a class of assets"
+    fields:
+      id:
+        type: uuid
+        attributes: ["@id", "@default(uuid)"]
+        description: "Unique category id"
+      company_id:
+        type: uuid
+        attributes: ["@required", "@exclude_from_foreign_key_check"]
+        description: "Books owner # logical FK to organization.Company.id"
+      category_name:
+        type: string
+        attributes: ["@required", "@max(140)"]
+        description: "Human name (e.g. Machinery, Vehicles)"
+      depreciation_method:
+        type: DepreciationMethod
+        attributes: ["@required", "@default(straight_line)"]
+        description: "Only straight_line is wired; others reserved"
+      useful_life_months:
+        type: int
+        attributes: ["@required", "@positive"]
+        description: "Depreciation period in months"
+      # --- GL accounts (logical FKs to accounting) ---
+      fixed_asset_account_id:
+        type: uuid
+        attributes: ["@required", "@exclude_from_foreign_key_check"]
+        description: "Fixed-asset (cost) account # logical FK to accounting.Account.id"
+      accumulated_depreciation_account_id:
+        type: uuid
+        attributes: ["@required", "@exclude_from_foreign_key_check"]
+        description: "Accumulated depreciation (contra-asset) account # logical FK to accounting.Account.id"
+      depreciation_expense_account_id:
+        type: uuid
+        attributes: ["@required", "@exclude_from_foreign_key_check"]
+        description: "Depreciation expense account # logical FK to accounting.Account.id"
+      disposal_gain_loss_account_id:
+        type: uuid
+        attributes: ["@required", "@exclude_from_foreign_key_check"]
+        description: "Gain/loss on disposal account # logical FK to accounting.Account.id"
+      is_active:
+        type: bool
+        attributes: ["@default(true)"]
+        description: "Category is usable"
+      metadata:
+        type: Metadata
+        attributes: ["@audit_metadata"]
+        description: "Audit metadata"
+    indexes:
+      - type: index
+        fields: [company_id, is_active]
+
+  - name: Asset
+    collection: assets
+    description: "One capitalized fixed asset with a running net book value"
+    fields:
+      id:
+        type: uuid
+        attributes: ["@id", "@default(uuid)"]
+        description: "Unique asset id"
+      company_id:
+        type: uuid
+        attributes: ["@required", "@exclude_from_foreign_key_check"]
+        description: "Books owner # logical FK to organization.Company.id"
+      asset_category_id:
+        type: uuid
+        attributes: ["@required", "@foreign_key(AssetCategory.id)"]
+        description: "The category (policy + accounts)"
+      asset_name:
+        type: string
+        attributes: ["@required", "@max(140)"]
+        description: "Human name / tag"
+      asset_code:
+        type: string
+        attributes: ["@required", "@max(40)"]
+        description: "Asset number (unique per company)"
+      item_id:
+        type: uuid?
+        attributes: ["@exclude_from_foreign_key_check"]
+        description: "The catalog item it was bought as (is_fixed_asset) # logical FK to catalog.Product.id"
+      branch_id:
+        type: uuid?
+        attributes: ["@exclude_from_foreign_key_check"]
+        description: "Location # logical FK to organization.Branch.id"
+
+      gross_purchase_amount:
+        type: decimal
+        attributes: ["@required", "@precision(18,2)", "@positive"]
+        description: "Capitalized cost"
+      salvage_value:
+        type: decimal
+        attributes: ["@default(0)", "@precision(18,2)", "@non_negative"]
+        description: "Residual value at end of life (not depreciated)"
+      useful_life_months:
+        type: int
+        attributes: ["@required", "@positive"]
+        description: "Depreciation period (snapshotted from the category, overridable)"
+      opening_accumulated_depreciation:
+        type: decimal
+        attributes: ["@default(0)", "@precision(18,2)", "@non_negative"]
+        description: "Depreciation already booked on legacy books when onboarding an EXISTING asset. When > 0 the asset is treated as opening: its gross + accumulated are already on the opening trial balance, so activation posts NO capitalization and schedules only the REMAINING life."
+      purchase_date:
+        type: datetime
+        attributes: ["@required"]
+        description: "Acquisition date"
+      available_for_use_date:
+        type: datetime?
+        description: "Depreciation start date (defaults to purchase_date on activation)"
+
+      accumulated_depreciation:
+        type: decimal
+        attributes: ["@default(0)", "@precision(18,2)", "@non_negative"]
+        description: "Depreciation posted so far"
+      net_book_value:
+        type: decimal
+        attributes: ["@default(0)", "@precision(18,2)"]
+        description: "gross_purchase_amount − accumulated_depreciation"
+
+      status:
+        type: AssetStatus
+        attributes: ["@required", "@default(draft)"]
+        description: "Lifecycle state"
+      metadata:
+        type: Metadata
+        attributes: ["@audit_metadata"]
+        description: "Audit metadata"
+    indexes:
+      - type: unique
+        fields: [company_id, asset_code]
+        where: "deleted_at IS NULL"
+      - type: index
+        fields: [company_id, status]
+      - type: index
+        fields: [asset_category_id]
+
+  - name: AssetDepreciationEntry
+    collection: asset_depreciation_entries
+    description: "One period's planned straight-line depreciation; posted → GL"
+    fields:
+      id:
+        type: uuid
+        attributes: ["@id", "@default(uuid)"]
+        description: "Unique schedule row id"
+      company_id:
+        type: uuid
+        attributes: ["@required", "@exclude_from_foreign_key_check"]
+        description: "Books owner # logical FK to organization.Company.id"
+      asset_id:
+        type: uuid
+        attributes: ["@required", "@foreign_key(Asset.id)"]
+        description: "Parent asset"
+      period_no:
+        type: int
+        attributes: ["@required", "@positive"]
+        description: "1-based period index within the schedule"
+      schedule_date:
+        type: datetime
+        attributes: ["@required"]
+        description: "Date this period's depreciation is due"
+      depreciation_amount:
+        type: decimal
+        attributes: ["@required", "@precision(18,2)", "@non_negative"]
+        description: "Straight-line amount for this period (last period absorbs rounding residue)"
+      accumulated_after:
+        type: decimal
+        attributes: ["@required", "@precision(18,2)", "@non_negative"]
+        description: "Accumulated depreciation after this period posts"
+      posted:
+        type: bool
+        attributes: ["@default(false)"]
+        description: "Whether this period has been posted to the GL"
+      posted_at:
+        type: datetime?
+        description: "When it was posted"
+      metadata:
+        type: Metadata
+        attributes: ["@audit_metadata"]
+        description: "Audit metadata"
+    indexes:
+      - type: unique
+        fields: [asset_id, period_no]
+        where: "deleted_at IS NULL"
+      - type: index
+        fields: [company_id, asset_id, posted]
+
+enums:
+  - name: DepreciationMethod
+    description: "Depreciation method (only straight_line wired)"
+    variants:
+      - name: straight_line
+        description: "Equal amount each period"
+        default: true
+      - name: declining_balance
+        description: "Reserved (deferred)"
+      - name: written_down_value
+        description: "Reserved (deferred — UU PPh tax basis is a tax overlay)"
+
+  - name: AssetStatus
+    description: "Fixed-asset lifecycle"
+    variants:
+      - name: draft
+        description: "Registered, not yet capitalized/scheduled"
+        default: true
+      - name: active
+        description: "In use, depreciating"
+      - name: fully_depreciated
+        description: "Net book value has reached salvage"
+      - name: disposed
+        description: "Sold/retired — removed from the books"
