@@ -12,8 +12,11 @@ use std::sync::Arc;
 // Import handlers
 use crate::presentation::http::{
     create_asset_category_routes,
+    create_asset_category_read_routes,
     create_asset_routes,
-    create_asset_depreciation_entry_routes
+    create_asset_read_routes,
+    create_asset_depreciation_entry_routes,
+    create_asset_depreciation_entry_read_routes
 };
 
 // Import AppState for stateful routes
@@ -40,6 +43,18 @@ pub fn create_stateless_routes(module: &crate::AssetsModule) -> Router<()> {
         .merge(create_asset_category_routes(module.asset_category_service.clone()))
         .merge(create_asset_routes(module.asset_service.clone()))
         .merge(create_asset_depreciation_entry_routes(module.asset_depreciation_entry_service.clone()))
+}
+
+/// Read-only routes for the Assets module — every entity mounted READ-ONLY (the guarded base).
+///
+/// The generic `create_stateless_routes` exposes full mutable CRUD with no domain
+/// validation; this exposes only reads, so generic mutation can't bypass a write
+/// service's invariants. Extend it: `create_readonly_assets_routes(m).merge(my_validated_writes)`.
+pub fn create_readonly_assets_routes(module: &crate::AssetsModule) -> Router<()> {
+    Router::new()
+        .merge(create_asset_category_read_routes(module.asset_category_service.clone()))
+        .merge(create_asset_read_routes(module.asset_service.clone()))
+        .merge(create_asset_depreciation_entry_read_routes(module.asset_depreciation_entry_service.clone()))
 }
 
 /// Get all routes (stateless) for the Assets module.
