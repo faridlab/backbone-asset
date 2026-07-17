@@ -11,6 +11,13 @@
 # Add your hand-authored services, handlers, tests, and docs below as you write them.
 
 user_owned:
+  - "src/application/service/asset_events.rs"
+  - "src/application/service/asset_gl.rs"
+  - "src/application/service/asset_write_service.rs"
+  - "tests/asset_golden_cases.rs"
+  - "tests/asset_lifecycle_seam.rs"
+  - "tests/integrity_probes.rs"
+  - "scripts/**"
   # Hand-authored behavior (services + their HTTP surface). Examples:
   # - "src/application/service/onboarding_service.rs"
   # - "src/presentation/http/guarded_routes.rs"
