@@ -9,6 +9,7 @@
 //! (gross − salvage). Every verb does its idempotent GL post FIRST, then commits a status/posted gate
 //! (the manufacturing lesson), so a retry never double-posts. Money is IDR, 2dp, half-away-from-zero.
 
+use backbone_orm::company_scope;
 use rust_decimal::{Decimal, RoundingStrategy};
 use sqlx::{PgPool, Row};
 use uuid::Uuid;
@@ -118,7 +119,9 @@ impl AssetWriteService {
             return Err(AssetError::Invalid("useful_life_months must be positive".into()));
         }
         let id = Uuid::new_v4();
-        sqlx::query(
+        // RLS scope (ADR-0008): company is on the DTO — scope the insert on it so it passes the
+        // WITH CHECK fence. The explicit `company_id` bind stays as defense-in-depth.
+        let insert_q = sqlx::query(
             r#"INSERT INTO asset.asset_categories
                  (id, company_id, category_name, depreciation_method, useful_life_months,
                   fixed_asset_account_id, accumulated_depreciation_account_id,
@@ -127,8 +130,11 @@ impl AssetWriteService {
         )
         .bind(id).bind(c.company_id).bind(&c.category_name).bind(c.useful_life_months)
         .bind(c.fixed_asset_account_id).bind(c.accumulated_depreciation_account_id)
-        .bind(c.depreciation_expense_account_id).bind(c.disposal_gain_loss_account_id)
-        .execute(&self.pool).await?;
+        .bind(c.depreciation_expense_account_id).bind(c.disposal_gain_loss_account_id);
+        company_scope::with_company_scope(
+            Some(c.company_id),
+            company_scope::execute_scoped(&self.pool, insert_q),
+        ).await?;
         Ok(id)
     }
 
@@ -140,13 +146,19 @@ impl AssetWriteService {
         if a.salvage_value < Decimal::ZERO || a.salvage_value >= a.gross_purchase_amount {
             return Err(AssetError::Invalid("salvage_value must be in [0, gross)".into()));
         }
-        let cat_life: i32 = sqlx::query_scalar(
-            r#"SELECT useful_life_months FROM asset.asset_categories
-               WHERE id=$1 AND company_id=$2 AND (metadata->>'deleted_at') IS NULL"#,
+        // RLS scope (ADR-0008): company is on the DTO — scope the category lookup on it.
+        let cat_life: i32 = company_scope::with_company_scope(
+            Some(a.company_id),
+            company_scope::fetch_optional_scalar_scoped(
+                &self.pool,
+                sqlx::query_scalar(
+                    r#"SELECT useful_life_months FROM asset.asset_categories
+                       WHERE id=$1 AND company_id=$2 AND (metadata->>'deleted_at') IS NULL"#,
+                )
+                .bind(a.asset_category_id)
+                .bind(a.company_id),
+            ),
         )
-        .bind(a.asset_category_id)
-        .bind(a.company_id)
-        .fetch_optional(&self.pool)
         .await?
         .ok_or(AssetError::NotFound("asset category"))?;
         let life = if a.useful_life_months > 0 { a.useful_life_months } else { cat_life };
@@ -163,7 +175,7 @@ impl AssetWriteService {
         let opening = a.opening_accumulated_depreciation;
 
         let id = Uuid::new_v4();
-        let r = sqlx::query(
+        let insert_q = sqlx::query(
             r#"INSERT INTO asset.assets
                  (id, company_id, asset_category_id, asset_name, asset_code, item_id, branch_id,
                   gross_purchase_amount, salvage_value, opening_accumulated_depreciation,
@@ -173,8 +185,11 @@ impl AssetWriteService {
         )
         .bind(id).bind(a.company_id).bind(a.asset_category_id).bind(&a.asset_name).bind(&a.asset_code)
         .bind(a.item_id).bind(a.branch_id).bind(a.gross_purchase_amount).bind(a.salvage_value)
-        .bind(opening).bind(life).bind(a.purchase_date).bind(a.available_for_use_date)
-        .execute(&self.pool).await;
+        .bind(opening).bind(life).bind(a.purchase_date).bind(a.available_for_use_date);
+        let r = company_scope::with_company_scope(
+            Some(a.company_id),
+            company_scope::execute_scoped(&self.pool, insert_q),
+        ).await;
         if let Err(e) = r {
             return Err(if is_dup(&e) { AssetError::DuplicateNumber(a.asset_code) } else { e.into() });
         }
@@ -248,7 +263,10 @@ impl AssetWriteService {
         }
 
         // 3) Gate draft→active + insert the schedule.
+        // RLS scope (ADR-0008): the asset's company was read off its row above — bind it onto this
+        // transaction so the status flip and the schedule inserts pass the fence.
         let mut tx = self.pool.begin().await?;
+        company_scope::bind_company_on(&mut tx, a.company_id).await?;
         let moved = sqlx::query(
             r#"UPDATE asset.assets
                SET status='active'::asset_status, available_for_use_date=$2
@@ -300,16 +318,23 @@ impl AssetWriteService {
         let cat = self.load_category(a.company_id, a.category_id).await?;
         let depreciable = a.gross - a.salvage;
 
-        let entries = sqlx::query(
-            r#"SELECT id, period_no, schedule_date, depreciation_amount, accumulated_after
-               FROM asset.asset_depreciation_entries
-               WHERE asset_id=$1 AND posted=false AND schedule_date <= $2
-                 AND (metadata->>'deleted_at') IS NULL
-               ORDER BY period_no ASC"#,
+        // RLS scope (ADR-0008): the asset's company was just read off its row — scope the schedule read
+        // on it, so this is correct for non-request callers (the depreciation job) too.
+        let entries = company_scope::with_company_scope(
+            Some(a.company_id),
+            company_scope::fetch_all_rows_scoped(
+                &self.pool,
+                sqlx::query(
+                    r#"SELECT id, period_no, schedule_date, depreciation_amount, accumulated_after
+                       FROM asset.asset_depreciation_entries
+                       WHERE asset_id=$1 AND posted=false AND schedule_date <= $2
+                         AND (metadata->>'deleted_at') IS NULL
+                       ORDER BY period_no ASC"#,
+                )
+                .bind(asset_id)
+                .bind(up_to),
+            ),
         )
-        .bind(asset_id)
-        .bind(up_to)
-        .fetch_all(&self.pool)
         .await?;
 
         let mut posted = 0i32;
@@ -349,6 +374,9 @@ impl AssetWriteService {
             // under the lock; (d) advance the asset. On any error the tx rolls back, leaving the period
             // unposted for a clean retry (council 2026-07-06).
             let mut tx = self.pool.begin().await?;
+            // Bind the asset's own company (read off its row above) onto this transaction, so the
+            // row lock, the posted gate, and the asset advance all pass the RLS fence.
+            company_scope::bind_company_on(&mut tx, a.company_id).await?;
             let st: String = sqlx::query_scalar(
                 "SELECT status::text FROM asset.assets WHERE id=$1 FOR UPDATE",
             )
@@ -424,7 +452,15 @@ impl AssetWriteService {
         // status flip. A concurrent `run_depreciation` also takes this row lock, so it cannot advance
         // accumulated between this read and the disposal post — the Dr Accum Dep amount always matches
         // what depreciation actually credited, and the asset nets off the books (council 2026-07-06).
+        //
+        // RLS scope (ADR-0008): this method carries NO company — it is identified by the asset id
+        // alone, and the company is only known from the row read UNDER the lock inside this very
+        // transaction, so it cannot be bound explicitly up front. Bind the ambient scope instead:
+        // under HTTP that is the caller's company. A non-request CALLER (event subscriber / job) MUST
+        // wrap this call in `with_company_scope(Some(event.company_id))`, or the locked read below
+        // fails closed and the asset reads as not-found.
         let mut tx = self.pool.begin().await?;
+        company_scope::bind_current_company(&mut tx).await?;
         let row = sqlx::query(
             r#"SELECT company_id, asset_category_id, asset_code, gross_purchase_amount,
                       accumulated_depreciation, status::text AS status
@@ -513,15 +549,22 @@ impl AssetWriteService {
     }
 
     async fn load_category(&self, company_id: Uuid, id: Uuid) -> Result<Cat, AssetError> {
-        let r = sqlx::query(
-            r#"SELECT depreciation_method::text AS method, useful_life_months,
-                      fixed_asset_account_id, accumulated_depreciation_account_id,
-                      depreciation_expense_account_id, disposal_gain_loss_account_id
-               FROM asset.asset_categories WHERE id=$1 AND company_id=$2 AND (metadata->>'deleted_at') IS NULL"#,
+        // RLS scope (ADR-0008): the company is a parameter (read off the asset row by the caller) —
+        // scope the lookup on it, so this is correct for non-request callers (jobs) too.
+        let r = company_scope::with_company_scope(
+            Some(company_id),
+            company_scope::fetch_optional_row_scoped(
+                &self.pool,
+                sqlx::query(
+                    r#"SELECT depreciation_method::text AS method, useful_life_months,
+                              fixed_asset_account_id, accumulated_depreciation_account_id,
+                              depreciation_expense_account_id, disposal_gain_loss_account_id
+                       FROM asset.asset_categories WHERE id=$1 AND company_id=$2 AND (metadata->>'deleted_at') IS NULL"#,
+                )
+                .bind(id)
+                .bind(company_id),
+            ),
         )
-        .bind(id)
-        .bind(company_id)
-        .fetch_optional(&self.pool)
         .await?
         .ok_or(AssetError::NotFound("asset category"))?;
         Ok(Cat {
@@ -535,14 +578,20 @@ impl AssetWriteService {
     }
 
     async fn load_asset(&self, id: Uuid) -> Result<AssetRow, AssetError> {
-        let r = sqlx::query(
-            r#"SELECT company_id, asset_category_id, asset_code, gross_purchase_amount, salvage_value,
-                      useful_life_months, purchase_date, available_for_use_date,
-                      accumulated_depreciation, opening_accumulated_depreciation, status::text AS status
-               FROM asset.assets WHERE id=$1 AND (metadata->>'deleted_at') IS NULL"#,
+        // RLS scope (ADR-0008), ID-only pattern: identified by the asset id alone — no company to scope
+        // from up front, so this read rides the caller's scope (the request-dedicated connection under
+        // HTTP, or an event caller's `with_company_scope`). RLS fences it: another company's asset is
+        // simply not found. Callers read `company_id` off the returned row to bind their own tx.
+        let r = company_scope::fetch_optional_row_scoped(
+            &self.pool,
+            sqlx::query(
+                r#"SELECT company_id, asset_category_id, asset_code, gross_purchase_amount, salvage_value,
+                          useful_life_months, purchase_date, available_for_use_date,
+                          accumulated_depreciation, opening_accumulated_depreciation, status::text AS status
+                   FROM asset.assets WHERE id=$1 AND (metadata->>'deleted_at') IS NULL"#,
+            )
+            .bind(id),
         )
-        .bind(id)
-        .fetch_optional(&self.pool)
         .await?
         .ok_or(AssetError::NotFound("asset"))?;
         Ok(AssetRow {
