@@ -11,8 +11,13 @@
 
 use backbone_orm::company_scope;
 use rust_decimal::{Decimal, RoundingStrategy};
-use sqlx::{PgPool, Row};
+use sqlx::PgPool;
 use uuid::Uuid;
+
+use crate::infrastructure::persistence::{
+    AssetCategoryRepository, AssetDepreciationEntryRepository, AssetRepository,
+    NewAssetCategoryRow, NewAssetRow, NewDepreciationEntryRow,
+};
 
 use super::asset_events::*;
 use super::asset_gl::{AccountingPostEnvelope, GlPostLine, GlPostSink};
@@ -84,6 +89,9 @@ pub struct DisposalOutcome {
 
 pub struct AssetWriteService {
     pool: PgPool,
+    assets: AssetRepository,
+    categories: AssetCategoryRepository,
+    schedule: AssetDepreciationEntryRepository,
 }
 
 struct Cat {
@@ -111,7 +119,10 @@ struct AssetRow {
 
 impl AssetWriteService {
     pub fn new(pool: PgPool) -> Self {
-        Self { pool }
+        let assets = AssetRepository::new(pool.clone());
+        let categories = AssetCategoryRepository::new(pool.clone());
+        let schedule = AssetDepreciationEntryRepository::new(pool.clone());
+        Self { pool, assets, categories, schedule }
     }
 
     pub async fn create_category(&self, c: NewAssetCategory) -> Result<Uuid, AssetError> {
@@ -121,19 +132,19 @@ impl AssetWriteService {
         let id = Uuid::new_v4();
         // RLS scope (ADR-0008): company is on the DTO — scope the insert on it so it passes the
         // WITH CHECK fence. The explicit `company_id` bind stays as defense-in-depth.
-        let insert_q = sqlx::query(
-            r#"INSERT INTO asset.asset_categories
-                 (id, company_id, category_name, depreciation_method, useful_life_months,
-                  fixed_asset_account_id, accumulated_depreciation_account_id,
-                  depreciation_expense_account_id, disposal_gain_loss_account_id, is_active)
-               VALUES ($1,$2,$3,'straight_line'::depreciation_method,$4,$5,$6,$7,$8,true)"#,
-        )
-        .bind(id).bind(c.company_id).bind(&c.category_name).bind(c.useful_life_months)
-        .bind(c.fixed_asset_account_id).bind(c.accumulated_depreciation_account_id)
-        .bind(c.depreciation_expense_account_id).bind(c.disposal_gain_loss_account_id);
+        let row = NewAssetCategoryRow {
+            id,
+            company_id: c.company_id,
+            category_name: &c.category_name,
+            useful_life_months: c.useful_life_months,
+            fixed_asset_account_id: c.fixed_asset_account_id,
+            accumulated_depreciation_account_id: c.accumulated_depreciation_account_id,
+            depreciation_expense_account_id: c.depreciation_expense_account_id,
+            disposal_gain_loss_account_id: c.disposal_gain_loss_account_id,
+        };
         company_scope::with_company_scope(
             Some(c.company_id),
-            company_scope::execute_scoped(&self.pool, insert_q),
+            self.categories.insert_category(&self.pool, &row),
         ).await?;
         Ok(id)
     }
@@ -149,15 +160,7 @@ impl AssetWriteService {
         // RLS scope (ADR-0008): company is on the DTO — scope the category lookup on it.
         let cat_life: i32 = company_scope::with_company_scope(
             Some(a.company_id),
-            company_scope::fetch_optional_scalar_scoped(
-                &self.pool,
-                sqlx::query_scalar(
-                    r#"SELECT useful_life_months FROM asset.asset_categories
-                       WHERE id=$1 AND company_id=$2 AND (metadata->>'deleted_at') IS NULL"#,
-                )
-                .bind(a.asset_category_id)
-                .bind(a.company_id),
-            ),
+            self.categories.find_useful_life(&self.pool, a.asset_category_id, a.company_id),
         )
         .await?
         .ok_or(AssetError::NotFound("asset category"))?;
@@ -175,20 +178,24 @@ impl AssetWriteService {
         let opening = a.opening_accumulated_depreciation;
 
         let id = Uuid::new_v4();
-        let insert_q = sqlx::query(
-            r#"INSERT INTO asset.assets
-                 (id, company_id, asset_category_id, asset_name, asset_code, item_id, branch_id,
-                  gross_purchase_amount, salvage_value, opening_accumulated_depreciation,
-                  useful_life_months, purchase_date, available_for_use_date,
-                  accumulated_depreciation, net_book_value, status)
-               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$10,$8-$10,'draft'::asset_status)"#,
-        )
-        .bind(id).bind(a.company_id).bind(a.asset_category_id).bind(&a.asset_name).bind(&a.asset_code)
-        .bind(a.item_id).bind(a.branch_id).bind(a.gross_purchase_amount).bind(a.salvage_value)
-        .bind(opening).bind(life).bind(a.purchase_date).bind(a.available_for_use_date);
+        let row = NewAssetRow {
+            id,
+            company_id: a.company_id,
+            asset_category_id: a.asset_category_id,
+            asset_name: &a.asset_name,
+            asset_code: &a.asset_code,
+            item_id: a.item_id,
+            branch_id: a.branch_id,
+            gross_purchase_amount: a.gross_purchase_amount,
+            salvage_value: a.salvage_value,
+            opening_accumulated_depreciation: opening,
+            useful_life_months: life,
+            purchase_date: a.purchase_date,
+            available_for_use_date: a.available_for_use_date,
+        };
         let r = company_scope::with_company_scope(
             Some(a.company_id),
-            company_scope::execute_scoped(&self.pool, insert_q),
+            self.assets.insert_asset(&self.pool, &row),
         ).await;
         if let Err(e) = r {
             return Err(if is_dup(&e) { AssetError::DuplicateNumber(a.asset_code) } else { e.into() });
@@ -267,29 +274,21 @@ impl AssetWriteService {
         // transaction so the status flip and the schedule inserts pass the fence.
         let mut tx = self.pool.begin().await?;
         company_scope::bind_company_on(&mut tx, a.company_id).await?;
-        let moved = sqlx::query(
-            r#"UPDATE asset.assets
-               SET status='active'::asset_status, available_for_use_date=$2
-               WHERE id=$1 AND status='draft'::asset_status"#,
-        )
-        .bind(asset_id)
-        .bind(available)
-        .execute(&mut *tx)
-        .await?;
-        if moved.rows_affected() != 1 {
+        let moved = self.assets.claim_activation(&mut tx, asset_id, available).await?;
+        if moved != 1 {
             tx.rollback().await?;
             return Ok(()); // already activated (the acquisition post deduped)
         }
         for (p, date, amount, acc_after) in &rows {
-            sqlx::query(
-                r#"INSERT INTO asset.asset_depreciation_entries
-                     (id, company_id, asset_id, period_no, schedule_date, depreciation_amount,
-                      accumulated_after, posted)
-                   VALUES ($1,$2,$3,$4,$5,$6,$7,false)"#,
-            )
-            .bind(Uuid::new_v4()).bind(a.company_id).bind(asset_id).bind(p).bind(date).bind(amount).bind(acc_after)
-            .execute(&mut *tx)
-            .await?;
+            self.schedule.insert_entry(&mut tx, &NewDepreciationEntryRow {
+                id: Uuid::new_v4(),
+                company_id: a.company_id,
+                asset_id,
+                period_no: *p,
+                schedule_date: *date,
+                depreciation_amount: *amount,
+                accumulated_after: *acc_after,
+            }).await?;
         }
         tx.commit().await?;
         sink.publish(&AssetEvent::AssetActivated(AssetActivated {
@@ -322,18 +321,7 @@ impl AssetWriteService {
         // on it, so this is correct for non-request callers (the depreciation job) too.
         let entries = company_scope::with_company_scope(
             Some(a.company_id),
-            company_scope::fetch_all_rows_scoped(
-                &self.pool,
-                sqlx::query(
-                    r#"SELECT id, period_no, schedule_date, depreciation_amount, accumulated_after
-                       FROM asset.asset_depreciation_entries
-                       WHERE asset_id=$1 AND posted=false AND schedule_date <= $2
-                         AND (metadata->>'deleted_at') IS NULL
-                       ORDER BY period_no ASC"#,
-                )
-                .bind(asset_id)
-                .bind(up_to),
-            ),
+            self.schedule.list_due(&self.pool, asset_id, up_to),
         )
         .await?;
 
@@ -341,11 +329,11 @@ impl AssetWriteService {
         let mut total = Decimal::ZERO;
         let mut fully = false;
         for e in &entries {
-            let entry_id: Uuid = e.get("id");
-            let period_no: i32 = e.get("period_no");
-            let amount: Decimal = e.get("depreciation_amount");
-            let acc_after: Decimal = e.get("accumulated_after");
-            let sched: chrono::DateTime<chrono::Utc> = e.get("schedule_date");
+            let entry_id: Uuid = e.id;
+            let period_no: i32 = e.period_no;
+            let amount: Decimal = e.depreciation_amount;
+            let acc_after: Decimal = e.accumulated_after;
+            let sched: chrono::DateTime<chrono::Utc> = e.schedule_date;
 
             let is_last = acc_after >= depreciable;
             let env = AccountingPostEnvelope {
@@ -377,24 +365,13 @@ impl AssetWriteService {
             // Bind the asset's own company (read off its row above) onto this transaction, so the
             // row lock, the posted gate, and the asset advance all pass the RLS fence.
             company_scope::bind_company_on(&mut tx, a.company_id).await?;
-            let st: String = sqlx::query_scalar(
-                "SELECT status::text FROM asset.assets WHERE id=$1 FOR UPDATE",
-            )
-            .bind(asset_id)
-            .fetch_one(&mut *tx)
-            .await?;
+            let st: String = self.assets.lock_status(&mut tx, asset_id).await?;
             if st == "disposed" {
                 tx.rollback().await?;
                 break;
             }
-            let g = sqlx::query(
-                r#"UPDATE asset.asset_depreciation_entries SET posted=true, posted_at=now()
-                   WHERE id=$1 AND posted=false"#,
-            )
-            .bind(entry_id)
-            .execute(&mut *tx)
-            .await?;
-            if g.rows_affected() != 1 {
+            let g = self.schedule.claim_period(&mut tx, entry_id).await?;
+            if g != 1 {
                 tx.rollback().await?;
                 continue; // raced/retried — skip
             }
@@ -402,18 +379,7 @@ impl AssetWriteService {
                 tx.rollback().await?;
                 return Err(AssetError::Gl(e2.code));
             }
-            sqlx::query(
-                r#"UPDATE asset.assets
-                   SET accumulated_depreciation = accumulated_depreciation + $2,
-                       net_book_value = gross_purchase_amount - (accumulated_depreciation + $2),
-                       status = CASE WHEN $3 THEN 'fully_depreciated'::asset_status ELSE status END
-                   WHERE id=$1"#,
-            )
-            .bind(asset_id)
-            .bind(amount)
-            .bind(is_last)
-            .execute(&mut *tx)
-            .await?;
+            self.assets.advance_depreciation(&mut tx, asset_id, amount, is_last).await?;
             tx.commit().await?;
 
             posted += 1;
@@ -461,18 +427,14 @@ impl AssetWriteService {
         // fails closed and the asset reads as not-found.
         let mut tx = self.pool.begin().await?;
         company_scope::bind_current_company(&mut tx).await?;
-        let row = sqlx::query(
-            r#"SELECT company_id, asset_category_id, asset_code, gross_purchase_amount,
-                      accumulated_depreciation, status::text AS status
-               FROM asset.assets WHERE id=$1 AND (metadata->>'deleted_at') IS NULL FOR UPDATE"#,
-        )
-        .bind(asset_id)
-        .fetch_optional(&mut *tx)
-        .await?
-        .ok_or(AssetError::NotFound("asset"))?;
-        let status: String = row.get("status");
-        let gross: Decimal = row.get("gross_purchase_amount");
-        let accumulated: Decimal = row.get("accumulated_depreciation");
+        let row = self
+            .assets
+            .lock_for_disposal(&mut tx, asset_id)
+            .await?
+            .ok_or(AssetError::NotFound("asset"))?;
+        let status: String = row.status;
+        let gross: Decimal = row.gross_purchase_amount;
+        let accumulated: Decimal = row.accumulated_depreciation;
         let nbv = gross - accumulated;
         if status == "disposed" {
             tx.rollback().await?;
@@ -482,9 +444,9 @@ impl AssetWriteService {
             tx.rollback().await?;
             return Err(AssetError::InvalidState("asset is not disposable"));
         }
-        let company_id: Uuid = row.get("company_id");
-        let category_id: Uuid = row.get("asset_category_id");
-        let asset_code: String = row.get("asset_code");
+        let company_id: Uuid = row.company_id;
+        let category_id: Uuid = row.asset_category_id;
+        let asset_code: String = row.asset_code;
         let cat = self.load_category(company_id, category_id).await?;
         let gain_loss = proceeds - nbv; // + gain, − loss
 
@@ -523,10 +485,7 @@ impl AssetWriteService {
             tx.rollback().await?;
             return Err(AssetError::Gl(e.code));
         }
-        sqlx::query("UPDATE asset.assets SET status='disposed'::asset_status WHERE id=$1")
-            .bind(asset_id)
-            .execute(&mut *tx)
-            .await?;
+        self.assets.mark_disposed(&mut tx, asset_id).await?;
         tx.commit().await?;
         sink.publish(&AssetEvent::AssetDisposed(AssetDisposed {
             asset_id,
@@ -553,27 +512,17 @@ impl AssetWriteService {
         // scope the lookup on it, so this is correct for non-request callers (jobs) too.
         let r = company_scope::with_company_scope(
             Some(company_id),
-            company_scope::fetch_optional_row_scoped(
-                &self.pool,
-                sqlx::query(
-                    r#"SELECT depreciation_method::text AS method, useful_life_months,
-                              fixed_asset_account_id, accumulated_depreciation_account_id,
-                              depreciation_expense_account_id, disposal_gain_loss_account_id
-                       FROM asset.asset_categories WHERE id=$1 AND company_id=$2 AND (metadata->>'deleted_at') IS NULL"#,
-                )
-                .bind(id)
-                .bind(company_id),
-            ),
+            self.categories.find_accounts(&self.pool, id, company_id),
         )
         .await?
         .ok_or(AssetError::NotFound("asset category"))?;
         Ok(Cat {
-            method: r.get("method"),
-            useful_life_months: r.get("useful_life_months"),
-            fixed_asset: r.get("fixed_asset_account_id"),
-            accum_dep: r.get("accumulated_depreciation_account_id"),
-            dep_expense: r.get("depreciation_expense_account_id"),
-            gain_loss: r.get("disposal_gain_loss_account_id"),
+            method: r.method,
+            useful_life_months: r.useful_life_months,
+            fixed_asset: r.fixed_asset_account_id,
+            accum_dep: r.accumulated_depreciation_account_id,
+            dep_expense: r.depreciation_expense_account_id,
+            gain_loss: r.disposal_gain_loss_account_id,
         })
     }
 
@@ -582,30 +531,23 @@ impl AssetWriteService {
         // from up front, so this read rides the caller's scope (the request-dedicated connection under
         // HTTP, or an event caller's `with_company_scope`). RLS fences it: another company's asset is
         // simply not found. Callers read `company_id` off the returned row to bind their own tx.
-        let r = company_scope::fetch_optional_row_scoped(
-            &self.pool,
-            sqlx::query(
-                r#"SELECT company_id, asset_category_id, asset_code, gross_purchase_amount, salvage_value,
-                          useful_life_months, purchase_date, available_for_use_date,
-                          accumulated_depreciation, opening_accumulated_depreciation, status::text AS status
-                   FROM asset.assets WHERE id=$1 AND (metadata->>'deleted_at') IS NULL"#,
-            )
-            .bind(id),
-        )
-        .await?
-        .ok_or(AssetError::NotFound("asset"))?;
+        let r = self
+            .assets
+            .find_snapshot(&self.pool, id)
+            .await?
+            .ok_or(AssetError::NotFound("asset"))?;
         Ok(AssetRow {
-            company_id: r.get("company_id"),
-            category_id: r.get("asset_category_id"),
-            asset_code: r.get("asset_code"),
-            gross: r.get("gross_purchase_amount"),
-            salvage: r.get("salvage_value"),
-            useful_life_months: r.get("useful_life_months"),
-            purchase_date: r.get("purchase_date"),
-            available: r.get("available_for_use_date"),
-            accumulated: r.get("accumulated_depreciation"),
-            opening: r.get("opening_accumulated_depreciation"),
-            status: r.get("status"),
+            company_id: r.company_id,
+            category_id: r.asset_category_id,
+            asset_code: r.asset_code,
+            gross: r.gross_purchase_amount,
+            salvage: r.salvage_value,
+            useful_life_months: r.useful_life_months,
+            purchase_date: r.purchase_date,
+            available: r.available_for_use_date,
+            accumulated: r.accumulated_depreciation,
+            opening: r.opening_accumulated_depreciation,
+            status: r.status,
         })
     }
 }

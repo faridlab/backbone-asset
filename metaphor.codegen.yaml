@@ -14,6 +14,14 @@ user_owned:
   - "src/application/service/asset_events.rs"
   - "src/application/service/asset_gl.rs"
   - "src/application/service/asset_write_service.rs"
+  # Own the hand-written asset SQL (the category + asset registration, the activation gate and its
+  # generated schedule, the per-period posted gate, and the `FOR UPDATE` reads that serialize
+  # depreciation against disposal) that the write service orchestrates. Declared here — not renamed
+  # with a `_custom` suffix — so the generator skips them wholesale; this declaration is what makes
+  # editing them legitimate.
+  - "src/infrastructure/persistence/asset_category_repository.rs"
+  - "src/infrastructure/persistence/asset_depreciation_entry_repository.rs"
+  - "src/infrastructure/persistence/asset_repository.rs"
   - "tests/asset_golden_cases.rs"
   - "tests/asset_lifecycle_seam.rs"
   - "tests/integrity_probes.rs"
