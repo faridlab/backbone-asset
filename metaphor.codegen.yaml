@@ -14,6 +14,12 @@ user_owned:
   - "src/application/service/asset_events.rs"
   - "src/application/service/asset_gl.rs"
   - "src/application/service/asset_write_service.rs"
+  # The write surface, chunked out of asset_write_service.rs. Each is an `impl AssetWriteService`
+  # block; the shared vocabulary (input structs, outcomes, errors, internal helpers) stays in
+  # asset_write_service.rs.
+  - "src/application/service/asset_activate.rs"
+  - "src/application/service/asset_depreciate.rs"
+  - "src/application/service/asset_dispose.rs"
   # Own the hand-written asset SQL (the category + asset registration, the activation gate and its
   # generated schedule, the per-period posted gate, and the `FOR UPDATE` reads that serialize
   # depreciation against disposal) that the write service orchestrates. Declared here — not renamed

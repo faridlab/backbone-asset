@@ -15,6 +15,12 @@ pub mod asset_depreciation_entry_service;
 pub mod asset_gl;
 pub mod asset_events;
 pub mod asset_write_service;
+// The write surface, chunked: each is an `impl AssetWriteService` block over the vocabulary that
+// stays in `asset_write_service` (so the `asset_write_service::{NewAsset, ...}` import paths are
+// unchanged).
+pub mod asset_activate;
+pub mod asset_depreciate;
+pub mod asset_dispose;
 // END CUSTOM
 
 pub use asset_category_service::AssetCategoryService;
