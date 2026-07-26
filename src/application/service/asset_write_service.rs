@@ -303,24 +303,33 @@ impl AssetWriteService {
     /// Post every schedule period due on or before `up_to`: `Dr Depreciation Expense · Cr Accum Dep`.
     /// Each period is posted at most once (post first, then the `posted` gate), advancing the asset's
     /// accumulated depreciation / net book value; the last period flips it to `fully_depreciated`.
+    ///
+    /// `company_id` scopes the lookup, so a principal of company A cannot depreciate company B's asset
+    /// by knowing its id — proving *who* the caller is is not enough, the row must be theirs. A
+    /// mismatched tenant is indistinguishable from a missing asset (`NotFound`), so this does not
+    /// leak whether the id exists. Event/job callers (the depreciation job) must pass the event's
+    /// company explicitly — they no longer ride the request-dedicated connection by default.
     pub async fn run_depreciation(
         &self,
         asset_id: Uuid,
+        company_id: Uuid,
         up_to: chrono::DateTime<chrono::Utc>,
         gl: &dyn GlPostSink,
         sink: &dyn AssetEventSink,
     ) -> Result<DepreciationRunOutcome, AssetError> {
-        let a = self.load_asset(asset_id).await?;
+        // RLS scope (ADR-0008): company on the parameter — scope the asset snapshot read so it runs
+        // with `app.company_id` set. The repo statement is fenced by RLS; the explicit company_id
+        // here is the scope wrapper, in the service.
+        let a = company_scope::with_company_scope(Some(company_id), self.load_asset(asset_id)).await?;
         if a.status == "disposed" {
             return Err(AssetError::InvalidState("asset is disposed"));
         }
-        let cat = self.load_category(a.company_id, a.category_id).await?;
+        let cat = self.load_category(company_id, a.category_id).await?;
         let depreciable = a.gross - a.salvage;
 
-        // RLS scope (ADR-0008): the asset's company was just read off its row — scope the schedule read
-        // on it, so this is correct for non-request callers (the depreciation job) too.
+        // RLS scope (ADR-0008): scope the schedule read on the same parameter company.
         let entries = company_scope::with_company_scope(
-            Some(a.company_id),
+            Some(company_id),
             self.schedule.list_due(&self.pool, asset_id, up_to),
         )
         .await?;
@@ -338,7 +347,7 @@ impl AssetWriteService {
             let is_last = acc_after >= depreciable;
             let env = AccountingPostEnvelope {
                 idempotency_key: format!("depr:{entry_id}"),
-                company_id: a.company_id,
+                company_id,
                 branch_id: None,
                 source_type: "asset".into(),
                 source_id: Uuid::new_v5(&entry_id, b"asset:depreciate"),
@@ -362,9 +371,9 @@ impl AssetWriteService {
             // under the lock; (d) advance the asset. On any error the tx rolls back, leaving the period
             // unposted for a clean retry (council 2026-07-06).
             let mut tx = self.pool.begin().await?;
-            // Bind the asset's own company (read off its row above) onto this transaction, so the
-            // row lock, the posted gate, and the asset advance all pass the RLS fence.
-            company_scope::bind_company_on(&mut tx, a.company_id).await?;
+            // Bind the caller's company onto this transaction, so the row lock, the posted gate, and
+            // the asset advance all pass the RLS fence.
+            company_scope::bind_company_on(&mut tx, company_id).await?;
             let st: String = self.assets.lock_status(&mut tx, asset_id).await?;
             if st == "disposed" {
                 tx.rollback().await?;
@@ -390,7 +399,7 @@ impl AssetWriteService {
             sink.publish(&AssetEvent::DepreciationPosted(DepreciationPosted {
                 asset_id,
                 entry_id,
-                company_id: a.company_id,
+                company_id,
                 period_no,
                 amount,
                 accumulated_after: acc_after,
@@ -402,9 +411,15 @@ impl AssetWriteService {
 
     /// Dispose the asset: remove it from the books and recognise gain/loss.
     /// `Dr Accum Dep + Dr Proceeds ± gain/loss · Cr Fixed Asset`. Idempotent (post + status gate).
+    ///
+    /// `company_id` scopes the lookup for the same reason as [`Self::run_depreciation`]: the caller's
+    /// tenant must own the row, not merely be authenticated. The locked read runs under the explicit
+    /// scope, so a mismatched tenant's asset is simply not found — defense-in-depth on top of the
+    /// RLS fence. Event/job callers (the disposal handler) must pass the event's company explicitly.
     pub async fn dispose_asset(
         &self,
         asset_id: Uuid,
+        company_id: Uuid,
         proceeds: Decimal,
         proceeds_account_id: Uuid,
         at: chrono::NaiveDate,
@@ -419,14 +434,13 @@ impl AssetWriteService {
         // accumulated between this read and the disposal post — the Dr Accum Dep amount always matches
         // what depreciation actually credited, and the asset nets off the books (council 2026-07-06).
         //
-        // RLS scope (ADR-0008): this method carries NO company — it is identified by the asset id
-        // alone, and the company is only known from the row read UNDER the lock inside this very
-        // transaction, so it cannot be bound explicitly up front. Bind the ambient scope instead:
-        // under HTTP that is the caller's company. A non-request CALLER (event subscriber / job) MUST
-        // wrap this call in `with_company_scope(Some(event.company_id))`, or the locked read below
-        // fails closed and the asset reads as not-found.
+        // RLS scope (ADR-0008): company on the parameter — bind it explicitly onto this transaction
+        // so the row lock, the post, and the status flip all pass the RLS fence. The locked read
+        // refuses another company's asset (returns None → NotFound); that is defense-in-depth on top
+        // of the RLS fence. An event/job caller can no longer forget to scope — `company_id` is on
+        // the signature.
         let mut tx = self.pool.begin().await?;
-        company_scope::bind_current_company(&mut tx).await?;
+        company_scope::bind_company_on(&mut tx, company_id).await?;
         let row = self
             .assets
             .lock_for_disposal(&mut tx, asset_id)
@@ -444,7 +458,6 @@ impl AssetWriteService {
             tx.rollback().await?;
             return Err(AssetError::InvalidState("asset is not disposable"));
         }
-        let company_id: Uuid = row.company_id;
         let category_id: Uuid = row.asset_category_id;
         let asset_code: String = row.asset_code;
         let cat = self.load_category(company_id, category_id).await?;

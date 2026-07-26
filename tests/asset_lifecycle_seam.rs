@@ -55,7 +55,7 @@ async fn alseam1_full_life_then_disposal_nets_off_books() {
     assert_eq!(balance(&pool, acc.funding).await, dec("-12000.00"));
 
     // Depreciate the whole life: Σ = depreciable 12,000.
-    let r = svc.run_depreciation(asset, far(), &gl, &sink).await.unwrap();
+    let r = svc.run_depreciation(asset, company, far(), &gl, &sink).await.unwrap();
     assert_eq!(r.periods_posted, 12);
     assert_eq!(r.total_posted, dec("12000.00"), "Σ depreciation == depreciable base");
     assert!(r.fully_depreciated);
@@ -63,7 +63,7 @@ async fn alseam1_full_life_then_disposal_nets_off_books() {
     assert_eq!(balance(&pool, acc.accum_dep).await, dec("-12000.00"));
 
     // Dispose at a gain (NBV = 0, proceeds 3,000 → gain 3,000).
-    let d = svc.dispose_asset(asset, dec("3000"), acc.proceeds, today(), &gl, &sink).await.unwrap();
+    let d = svc.dispose_asset(asset, company, dec("3000"), acc.proceeds, today(), &gl, &sink).await.unwrap();
     assert_eq!(d.net_book_value, dec("0"));
     assert_eq!(d.gain_loss, dec("3000"));
 
@@ -92,12 +92,12 @@ async fn alseam2_early_disposal_at_a_loss() {
     svc.activate_asset(asset, acc.funding, today(), &gl, &sink).await.unwrap();
 
     // ~3 months → 3 × 100 = 300 depreciated; NBV = 900.
-    let r = svc.run_depreciation(asset, now() + chrono::Duration::days(95), &gl, &sink).await.unwrap();
+    let r = svc.run_depreciation(asset, company, now() + chrono::Duration::days(95), &gl, &sink).await.unwrap();
     assert_eq!(r.periods_posted, 3);
     assert_eq!(r.total_posted, dec("300.00"));
 
     // Dispose for 500 → loss = 500 − 900 = −400.
-    let d = svc.dispose_asset(asset, dec("500"), acc.proceeds, today(), &gl, &sink).await.unwrap();
+    let d = svc.dispose_asset(asset, company, dec("500"), acc.proceeds, today(), &gl, &sink).await.unwrap();
     assert_eq!(d.net_book_value, dec("900"));
     assert_eq!(d.gain_loss, dec("-400"));
 
