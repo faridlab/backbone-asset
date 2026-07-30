@@ -242,7 +242,7 @@ dependencies = [
 
 [[package]]
 name = "backbone-asset"
-version = "0.3.1"
+version = "0.4.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -312,6 +312,8 @@ dependencies = [
  "anyhow",
  "argon2",
  "async-trait",
+ "axum",
+ "backbone-orm 2.0.0 (git+https://github.com/faridlab/backbone-framework?branch=main)",
  "chrono",
  "email_address",
  "jsonwebtoken",

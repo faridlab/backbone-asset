@@ -13,6 +13,10 @@ use axum::body::{to_bytes, Body};
 use axum::http::{Method, Request, StatusCode};
 use backbone_asset::application::service::{AssetWriteService, NewAssetCategory};
 use backbone_asset::AssetsModule;
+// The lifecycle handlers source `company_id` from a verified `CompanyContext` (set by the consumer's
+// `company_auth` middleware). The test bypasses the JWT and injects the context directly into the
+// request extensions — the same place the extractor reads it from.
+use backbone_auth::company::CompanyContext;
 use common::{pool, CountingGl};
 use serde_json::{json, Value};
 use tower::ServiceExt;
@@ -23,6 +27,22 @@ fn req(method: Method, uri: &str, body: Value) -> Request<Body> {
         .method(method)
         .uri(uri)
         .header("content-type", "application/json")
+        .body(Body::from(body.to_string()))
+        .unwrap()
+}
+
+/// Like `req` but injects a verified `CompanyContext` for `company` into the request extensions,
+/// standing in for the `company_auth` middleware on the HTTP path.
+fn req_as(company: Uuid, method: Method, uri: &str, body: Value) -> Request<Body> {
+    Request::builder()
+        .method(method)
+        .uri(uri)
+        .header("content-type", "application/json")
+        .extension(CompanyContext {
+            company_id: company,
+            branch_id: None,
+            user_id: "test".into(),
+        })
         .body(Body::from(body.to_string()))
         .unwrap()
 }
@@ -88,14 +108,14 @@ async fn lifecycle_verbs_post_through_the_sink() {
         .unwrap();
     let router = module.read_only_routes().merge(module.lifecycle_routes());
 
-    // 1) register a draft asset (validated path).
+    // 1) register a draft asset (validated path). company_id comes from the injected CompanyContext.
     let r = router
         .clone()
-        .oneshot(req(
+        .oneshot(req_as(
+            company,
             Method::POST,
             "/assets/register",
             json!({
-                "company_id": company,
                 "asset_category_id": cat,
                 "asset_name": "Lathe",
                 "asset_code": format!("AST-{}", &Uuid::new_v4().to_string()[..8]),
@@ -114,7 +134,8 @@ async fn lifecycle_verbs_post_through_the_sink() {
     // 2) activate (capitalize + generate the 12-period schedule).
     let r = router
         .clone()
-        .oneshot(req(
+        .oneshot(req_as(
+            company,
             Method::POST,
             &format!("/assets/{id}/activate"),
             json!({ "funding_account_id": Uuid::new_v4(), "at": "2025-01-01" }),
@@ -127,10 +148,11 @@ async fn lifecycle_verbs_post_through_the_sink() {
     // 3) depreciate every due period (up_to well past the schedule).
     let r = router
         .clone()
-        .oneshot(req(
+        .oneshot(req_as(
+            company,
             Method::POST,
             &format!("/assets/{id}/depreciate"),
-            json!({ "company_id": company, "up_to": "2030-01-01T00:00:00Z" }),
+            json!({ "up_to": "2030-01-01T00:00:00Z" }),
         ))
         .await
         .unwrap();
@@ -142,11 +164,11 @@ async fn lifecycle_verbs_post_through_the_sink() {
     // 4) dispose (proceeds 0 — asset is fully depreciated, so NBV is 0).
     let r = router
         .clone()
-        .oneshot(req(
+        .oneshot(req_as(
+            company,
             Method::POST,
             &format!("/assets/{id}/dispose"),
             json!({
-                "company_id": company,
                 "proceeds": "0",
                 "proceeds_account_id": Uuid::new_v4(),
                 "at": "2030-01-01",

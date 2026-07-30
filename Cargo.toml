@@ -1,6 +1,6 @@
 [package]
 name = "backbone-asset"
-version = "0.3.1"
+version = "0.4.0"
 edition = "2021"
 description = "Minimal Backbone Framework module skeleton"
 
@@ -19,7 +19,7 @@ path = "src/lib.rs"
 # -----------------------------------------------------------------------------
 backbone-core = { git = "https://github.com/faridlab/backbone-framework", branch = "main", features = ["postgres"] }
 backbone-orm = { git = "https://github.com/faridlab/backbone-framework", branch = "main" }
-backbone-auth = { git = "https://github.com/faridlab/backbone-framework", branch = "main" }
+backbone-auth = { git = "https://github.com/faridlab/backbone-framework", branch = "main", features = ["axum"] }
 backbone-messaging = { git = "https://github.com/faridlab/backbone-framework", branch = "main" }
 
 # Core async runtime and serialization

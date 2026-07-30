@@ -59,8 +59,8 @@ async fn ip1_activate_idempotent() {
     let (svc, company, acc, asset) = setup("12000", "0", 12).await;
     let gl = CountingGl::new();
     let sink = LoggingSink;
-    svc.activate_asset(asset, acc.funding, today(), &gl, &sink).await.unwrap();
-    svc.activate_asset(asset, acc.funding, today(), &gl, &sink).await.unwrap(); // retry
+    svc.activate_asset(asset, company, acc.funding, today(), &gl, &sink).await.unwrap();
+    svc.activate_asset(asset, company, acc.funding, today(), &gl, &sink).await.unwrap(); // retry
     assert_eq!(gl.count("acquire"), 1, "capitalization posted once");
     let n: i64 = sqlx::query_scalar("SELECT count(*) FROM asset.asset_depreciation_entries WHERE asset_id=$1")
         .bind(asset).fetch_one(&pool).await.unwrap();
@@ -75,7 +75,7 @@ async fn ip2_depreciation_idempotent() {
     let (svc, company, acc, asset) = setup("1200", "0", 12).await;
     let gl = CountingGl::new();
     let sink = LoggingSink;
-    svc.activate_asset(asset, acc.funding, today(), &gl, &sink).await.unwrap();
+    svc.activate_asset(asset, company, acc.funding, today(), &gl, &sink).await.unwrap();
 
     let a = svc.run_depreciation(asset, company, far_future(), &gl, &sink).await.unwrap();
     assert_eq!(a.periods_posted, 12);
@@ -96,7 +96,7 @@ async fn ip3_run_respects_cutoff() {
     let (svc, company, acc, asset) = setup("1200", "0", 12).await;
     let gl = CountingGl::new();
     let sink = LoggingSink;
-    svc.activate_asset(asset, acc.funding, today(), &gl, &sink).await.unwrap();
+    svc.activate_asset(asset, company, acc.funding, today(), &gl, &sink).await.unwrap();
     // Only ~3 months elapsed.
     let cutoff = now() + chrono::Duration::days(95);
     let r = svc.run_depreciation(asset, company, cutoff, &gl, &sink).await.unwrap();
@@ -110,7 +110,7 @@ async fn ip4_dispose_idempotent() {
     let (svc, company, acc, asset) = setup("1000", "0", 10).await;
     let gl = CountingGl::new();
     let sink = LoggingSink;
-    svc.activate_asset(asset, acc.funding, today(), &gl, &sink).await.unwrap();
+    svc.activate_asset(asset, company, acc.funding, today(), &gl, &sink).await.unwrap();
     // Dispose immediately (NBV = 1000, proceeds 200 → loss 800).
     let a = svc.dispose_asset(asset, company, dec("200"), acc.proceeds, today(), &gl, &sink).await.unwrap();
     assert!(!a.already);
@@ -155,7 +155,7 @@ async fn ip6_dispose_vs_depreciation_serialize() {
             opening_accumulated_depreciation: dec("0"),
             useful_life_months: 12, purchase_date: now(), available_for_use_date: None,
         }).await.unwrap();
-        svc.activate_asset(asset, acc.funding, today(), &GlAdapter::new(pool.clone()), &LoggingSink).await.unwrap();
+        svc.activate_asset(asset, company, acc.funding, today(), &GlAdapter::new(pool.clone()), &LoggingSink).await.unwrap();
 
         // Race a full depreciation run against a disposal.
         let (s1, s2) = (svc.clone(), svc.clone());
@@ -190,7 +190,7 @@ async fn ip7_dispose_without_catchup_is_coherent() {
     let (svc, company, acc, asset) = setup("12000", "0", 12).await;
     let gl = GlAdapter::new(pool.clone());
     let sink = LoggingSink;
-    svc.activate_asset(asset, acc.funding, today(), &gl, &sink).await.unwrap();
+    svc.activate_asset(asset, company, acc.funding, today(), &gl, &sink).await.unwrap();
 
     // Only 3 periods run (accumulated 3,000), but dispose WITHOUT catching up the rest.
     svc.run_depreciation(asset, company, now() + chrono::Duration::days(95), &gl, &sink).await.unwrap();

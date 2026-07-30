@@ -36,10 +36,9 @@ impl AssetWriteService {
         gl: &dyn GlPostSink,
         sink: &dyn AssetEventSink,
     ) -> Result<DepreciationRunOutcome, AssetError> {
-        // RLS scope (ADR-0008): company on the parameter — scope the asset snapshot read so it runs
-        // with `app.company_id` set. The repo statement is fenced by RLS; the explicit company_id
-        // here is the scope wrapper, in the service.
-        let a = company_scope::with_company_scope(Some(company_id), self.load_asset(asset_id)).await?;
+        // RLS scope (ADR-0008): load_asset scopes itself on the verified company_id parameter, so a
+        // mismatched tenant's asset is NotFound.
+        let a = self.load_asset(company_id, asset_id).await?;
         if a.status == "disposed" {
             return Err(AssetError::InvalidState("asset is disposed"));
         }

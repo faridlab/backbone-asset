@@ -241,16 +241,18 @@ impl AssetWriteService {
         })
     }
 
-    pub(super) async fn load_asset(&self, id: Uuid) -> Result<AssetRow, AssetError> {
-        // RLS scope (ADR-0008), ID-only pattern: identified by the asset id alone — no company to scope
-        // from up front, so this read rides the caller's scope (the request-dedicated connection under
-        // HTTP, or an event caller's `with_company_scope`). RLS fences it: another company's asset is
-        // simply not found. Callers read `company_id` off the returned row to bind their own tx.
-        let r = self
-            .assets
-            .find_snapshot(&self.pool, id)
-            .await?
-            .ok_or(AssetError::NotFound("asset"))?;
+    pub(super) async fn load_asset(&self, company_id: Uuid, id: Uuid) -> Result<AssetRow, AssetError> {
+        // RLS scope (ADR-0008): the caller supplies the VERIFIED company — the HTTP path derives it from
+        // the authenticated `CompanyContext` (never the request body); event/job callers pass it
+        // explicitly. Scope the snapshot read on it so a mismatched tenant's asset is simply NotFound.
+        // (load_asset uses the pool directly — a fresh connection — so it must scope itself; it does NOT
+        // ride a request-dedicated connection.)
+        let r = company_scope::with_company_scope(
+            Some(company_id),
+            self.assets.find_snapshot(&self.pool, id),
+        )
+        .await?
+        .ok_or(AssetError::NotFound("asset"))?;
         Ok(AssetRow {
             company_id: r.company_id,
             category_id: r.asset_category_id,

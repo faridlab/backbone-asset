@@ -28,12 +28,13 @@ impl AssetWriteService {
     pub async fn activate_asset(
         &self,
         asset_id: Uuid,
+        company_id: Uuid,
         funding_account_id: Uuid,
         at: chrono::NaiveDate,
         gl: &dyn GlPostSink,
         sink: &dyn AssetEventSink,
     ) -> Result<(), AssetError> {
-        let a = self.load_asset(asset_id).await?;
+        let a = self.load_asset(company_id, asset_id).await?;
         if a.status != "draft" {
             return Ok(()); // already activated — idempotent no-op (the acquisition post was made once)
         }

@@ -66,7 +66,7 @@ async fn agc1_divisible_schedule() {
     let acc = asset_accounts(&pool, company).await;
     let cat = category(&svc, company, &acc, 12).await;
     let a = asset(&svc, company, cat, "12000", "0", 0).await;
-    svc.activate_asset(a, acc.funding, today(), &gl, &sink).await.unwrap();
+    svc.activate_asset(a, company, acc.funding, today(), &gl, &sink).await.unwrap();
 
     let s = schedule(&pool, a).await;
     assert_eq!(s.len(), 12);
@@ -88,7 +88,7 @@ async fn agc2_non_divisible_last_absorbs_residue() {
     let cat = category(&svc, company, &acc, 3).await;
     // 10,000 over 3 → 3333.33, 3333.33, 3333.34 (Σ = 10,000).
     let a = asset(&svc, company, cat, "10000", "0", 0).await;
-    svc.activate_asset(a, acc.funding, today(), &gl, &sink).await.unwrap();
+    svc.activate_asset(a, company, acc.funding, today(), &gl, &sink).await.unwrap();
 
     let s = schedule(&pool, a).await;
     let amts: Vec<Decimal> = s.iter().map(|(_, amt, _)| *amt).collect();
@@ -108,7 +108,7 @@ async fn agc3_salvage_reduces_depreciable() {
     let cat = category(&svc, company, &acc, 4).await;
     // gross 10,000, salvage 2,000 → depreciable 8,000 / 4 = 2,000 each.
     let a = asset(&svc, company, cat, "10000", "2000", 0).await;
-    svc.activate_asset(a, acc.funding, today(), &gl, &sink).await.unwrap();
+    svc.activate_asset(a, company, acc.funding, today(), &gl, &sink).await.unwrap();
 
     let s = schedule(&pool, a).await;
     assert_eq!(s.iter().map(|(_, amt, _)| *amt).sum::<Decimal>(), dec("8000.00"));
@@ -137,7 +137,7 @@ async fn agc4_validation_and_life_inheritance() {
 
     // life 0 → inherit the category's 6 months.
     let a = asset(&svc, company, cat, "6000", "0", 0).await;
-    svc.activate_asset(a, acc.funding, today(), &gl, &sink).await.unwrap();
+    svc.activate_asset(a, company, acc.funding, today(), &gl, &sink).await.unwrap();
     assert_eq!(schedule(&pool, a).await.len(), 6, "useful life inherited from the category");
 }
 
@@ -170,7 +170,7 @@ async fn agc5_onboard_existing_part_depreciated_asset() {
     assert_eq!(accd, dec("30000.00"));
     assert_eq!(nbv, dec("90000.00"));
 
-    svc.activate_asset(a, acc.funding, today(), &gl, &sink).await.unwrap();
+    svc.activate_asset(a, company, acc.funding, today(), &gl, &sink).await.unwrap();
     // NO capitalization post — the asset is already on the opening trial balance.
     assert_eq!(gl.count("acquire"), 0, "an onboarded asset is NOT re-capitalized");
 

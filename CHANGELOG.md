@@ -4,6 +4,28 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.4.0] - 2026-07-30
+
+### Breaking (security — closes the cross-tenant GL-write primitive)
+- The lifecycle verbs now derive `company_id` from a verified `CompanyContext` (set by the consumer's
+  `company_auth` middleware from the signed JWT), **never the request body**. `company_id` is removed from
+  `RegisterAssetRequest` / `DepreciateAssetRequest` / `DisposeAssetRequest`; the `CompanyContext` extractor
+  returns **401 fail-closed** without a principal. (council ops-ux-security-readiness)
+- `AssetWriteService::activate_asset` gains a mandatory `company_id` parameter (the event/job path passes
+  it explicitly; the HTTP path passes `CompanyContext.company_id`).
+- `load_asset` is now `load_asset(company_id, id)` and scopes the snapshot read by the verified company —
+  a mismatched tenant's asset is `NotFound`.
+
+### Added
+- Tracing spans (`#[tracing::instrument]`) on the four lifecycle handlers (company + asset fields).
+- ADR-002 (verified-principal tenant contract).
+- `backbone-auth` `axum` feature enabled (`CompanyContext` / `company_auth`).
+
+### Notes
+- Consumers MUST mount `company_auth` (with a `CompanyVerifier`) on `read_only_routes()` +
+  `lifecycle_routes()`, and connect as a non-superuser RLS role (`scripts/rls_app_role.sql` → `metaphor_app`)
+  so the RLS fence binds. See `backbone-application` for the reference wiring.
+
 ## [0.3.1] - 2026-07-30
 
 ### Fixed

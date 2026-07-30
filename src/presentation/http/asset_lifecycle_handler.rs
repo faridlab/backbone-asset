@@ -28,6 +28,9 @@ use crate::application::service::{
 };
 // The engine error — NOT the presentation-layer `AssetError` in asset_handler.rs.
 use crate::application::service::AssetError as WriteError;
+// The verified tenant — proven by the consumer's `company_auth` middleware from the signed JWT.
+// This is the ONLY source of `company_id` for the lifecycle verbs; the request body never carries it.
+use backbone_auth::company::CompanyContext;
 
 /// Shared state for the lifecycle routes: the write service plus the two sinks the verbs
 /// post/publish through. `Clone` (everything is behind an `Arc`), so axum can hand a copy
@@ -67,7 +70,6 @@ impl IntoResponse for LifecycleApiError {
 
 #[derive(Debug, Deserialize)]
 pub struct RegisterAssetRequest {
-    pub company_id: Uuid,
     pub asset_category_id: Uuid,
     pub asset_name: String,
     pub asset_code: String,
@@ -96,13 +98,11 @@ pub struct ActivateAssetRequest {
 
 #[derive(Debug, Deserialize)]
 pub struct DepreciateAssetRequest {
-    pub company_id: Uuid,
     pub up_to: DateTime<Utc>,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct DisposeAssetRequest {
-    pub company_id: Uuid,
     pub proceeds: Decimal,
     pub proceeds_account_id: Uuid,
     pub at: NaiveDate,
@@ -113,14 +113,16 @@ pub struct DisposeAssetRequest {
 // ---------------------------------------------------------------------------
 
 /// Register a draft asset (validated: gross > 0, salvage in [0, gross), useful-life checks).
+#[tracing::instrument(skip_all, fields(company = %tenant.company_id))]
 pub async fn register_asset(
     State(st): State<AssetLifecycleState>,
+    tenant: CompanyContext,
     Json(req): Json<RegisterAssetRequest>,
 ) -> Result<(StatusCode, Json<Value>), LifecycleApiError> {
     let id = st
         .write_svc
         .create_asset(NewAsset {
-            company_id: req.company_id,
+            company_id: tenant.company_id,
             asset_category_id: req.asset_category_id,
             asset_name: req.asset_name,
             asset_code: req.asset_code,
@@ -142,27 +144,31 @@ pub async fn register_asset(
 }
 
 /// Capitalize + generate the straight-line schedule (draft → active).
+#[tracing::instrument(skip_all, fields(company = %tenant.company_id, asset = %id))]
 pub async fn activate_asset_handler(
     State(st): State<AssetLifecycleState>,
+    tenant: CompanyContext,
     Path(id): Path<Uuid>,
     Json(req): Json<ActivateAssetRequest>,
 ) -> Result<(StatusCode, Json<Value>), LifecycleApiError> {
     st.write_svc
-        .activate_asset(id, req.funding_account_id, req.at, st.gl.as_ref(), st.event_sink.as_ref())
+        .activate_asset(id, tenant.company_id, req.funding_account_id, req.at, st.gl.as_ref(), st.event_sink.as_ref())
         .await
         .map_err(LifecycleApiError)?;
     Ok((StatusCode::OK, Json(json!({ "success": true }))))
 }
 
 /// Post every depreciation period due on or before `up_to`.
+#[tracing::instrument(skip_all, fields(company = %tenant.company_id, asset = %id))]
 pub async fn run_depreciation_handler(
     State(st): State<AssetLifecycleState>,
+    tenant: CompanyContext,
     Path(id): Path<Uuid>,
     Json(req): Json<DepreciateAssetRequest>,
 ) -> Result<(StatusCode, Json<Value>), LifecycleApiError> {
     let outcome = st
         .write_svc
-        .run_depreciation(id, req.company_id, req.up_to, st.gl.as_ref(), st.event_sink.as_ref())
+        .run_depreciation(id, tenant.company_id, req.up_to, st.gl.as_ref(), st.event_sink.as_ref())
         .await
         .map_err(LifecycleApiError)?;
     Ok((
@@ -179,8 +185,10 @@ pub async fn run_depreciation_handler(
 }
 
 /// Remove the asset from the books and recognise gain/loss.
+#[tracing::instrument(skip_all, fields(company = %tenant.company_id, asset = %id))]
 pub async fn dispose_asset_handler(
     State(st): State<AssetLifecycleState>,
+    tenant: CompanyContext,
     Path(id): Path<Uuid>,
     Json(req): Json<DisposeAssetRequest>,
 ) -> Result<(StatusCode, Json<Value>), LifecycleApiError> {
@@ -188,7 +196,7 @@ pub async fn dispose_asset_handler(
         .write_svc
         .dispose_asset(
             id,
-            req.company_id,
+            tenant.company_id,
             req.proceeds,
             req.proceeds_account_id,
             req.at,

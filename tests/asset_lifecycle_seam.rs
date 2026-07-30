@@ -50,7 +50,7 @@ async fn alseam1_full_life_then_disposal_nets_off_books() {
     let asset = make(&pool, &svc, company, &acc, "12000", "0", 12).await;
 
     // Capitalize: Dr Fixed Asset 12,000 · Cr Funding 12,000.
-    svc.activate_asset(asset, acc.funding, today(), &gl, &sink).await.unwrap();
+    svc.activate_asset(asset, company, acc.funding, today(), &gl, &sink).await.unwrap();
     assert_eq!(balance(&pool, acc.fixed_asset).await, dec("12000.00"));
     assert_eq!(balance(&pool, acc.funding).await, dec("-12000.00"));
 
@@ -89,7 +89,7 @@ async fn alseam2_early_disposal_at_a_loss() {
     let company = Uuid::new_v4();
     let acc = asset_accounts(&pool, company).await;
     let asset = make(&pool, &svc, company, &acc, "1200", "0", 12).await;
-    svc.activate_asset(asset, acc.funding, today(), &gl, &sink).await.unwrap();
+    svc.activate_asset(asset, company, acc.funding, today(), &gl, &sink).await.unwrap();
 
     // ~3 months → 3 × 100 = 300 depreciated; NBV = 900.
     let r = svc.run_depreciation(asset, company, now() + chrono::Duration::days(95), &gl, &sink).await.unwrap();
