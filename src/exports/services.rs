@@ -5,8 +5,6 @@
 //! These services provide the public API for other modules.
 //! They only expose read operations - writes go through events.
 
-use std::sync::Arc;
-
 use anyhow::Result;
 use async_trait::async_trait;
 use uuid::Uuid;
@@ -50,21 +48,6 @@ pub trait AssetsQueryService: Send + Sync {
     /// Check if AssetDepreciationEntry exists
     async fn asset_depreciation_entry_exists(&self, id: AssetDepreciationEntryId) -> Result<bool>;
 
-}
-
-// ============================================================================
-// QUERY SERVICE IMPLEMENTATION
-// ============================================================================
-
-/// Default implementation of AssetsQueryService
-pub struct AssetsQueryServiceImpl<R> {
-    repository: Arc<R>,
-}
-
-impl<R> AssetsQueryServiceImpl<R> {
-    pub fn new(repository: Arc<R>) -> Self {
-        Self { repository }
-    }
 }
 
 // ============================================================================

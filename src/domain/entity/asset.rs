@@ -295,6 +295,9 @@ impl backbone_orm::EntityRepoMeta for Asset {
     fn search_fields() -> &'static [&'static str] {
         &["asset_name", "asset_code"]
     }
+    fn company_field() -> Option<&'static str> {
+        Some("company_id")
+    }
 }
 
 /// Builder for Asset entity
