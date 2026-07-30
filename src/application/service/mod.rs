@@ -21,6 +21,7 @@ pub mod asset_write_service;
 pub mod asset_activate;
 pub mod asset_depreciate;
 pub mod asset_dispose;
+pub mod assets_query_service;
 // END CUSTOM
 
 pub use asset_category_service::AssetCategoryService;
@@ -37,4 +38,5 @@ pub use asset_write_service::{
     AssetError, AssetWriteService, DepreciationRunOutcome, DisposalOutcome, NewAsset,
     NewAssetCategory,
 };
+pub use assets_query_service::AssetsQueryServiceImpl;
 // END CUSTOM
