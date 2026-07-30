@@ -131,20 +131,5 @@ impl Default for AssetsEventMetadata {
 // ============================================================================
 
 // <<< CUSTOM EVENTS START >>>
-// The fixed-asset lifecycle events (capitalized / depreciated / retired). These are the events
-// other modules actually want to subscribe to; they are defined in application/service/asset_events.rs
-// and re-published here so the module's published contract (exports) carries them. Re-exported
-// rather than folded into the generated `AssetsEvent` enum so this survives regeneration.
-pub use crate::application::service::asset_events::{AssetActivated, AssetDisposed, DepreciationPosted};
-
-/// All lifecycle events published by the Assets module — the GL-backed verbs a consumer
-/// subscribes to. (Kept separate from the generated `AssetsEvent` CRUD union so it is
-/// not overwritten on regeneration.)
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(tag = "type")]
-pub enum AssetsLifecycleEvent {
-    AssetActivated(AssetActivated),
-    DepreciationPosted(DepreciationPosted),
-    AssetDisposed(AssetDisposed),
-}
+// Add custom public events here
 // <<< CUSTOM EVENTS END >>>

@@ -36,7 +36,7 @@ async fn body_json(resp: axum::response::Response) -> Value {
 async fn financial_write_surface_is_read_only_by_default() {
     // Default surface only — no lifecycle routes mounted.
     let module = AssetsModule::builder().with_database(pool().await).build().unwrap();
-    let router = module.all_crud_routes();
+    let router = module.read_only_routes();
 
     // Generic create on the financial tables must be refused.
     let r = router.clone().oneshot(req(Method::POST, "/assets", json!({}))).await.unwrap();
@@ -86,7 +86,7 @@ async fn lifecycle_verbs_post_through_the_sink() {
         .with_gl_sink(gl.clone())
         .build()
         .unwrap();
-    let router = module.all_crud_routes().merge(module.lifecycle_routes());
+    let router = module.read_only_routes().merge(module.lifecycle_routes());
 
     // 1) register a draft asset (validated path).
     let r = router

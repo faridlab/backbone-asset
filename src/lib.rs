@@ -23,12 +23,16 @@ pub mod infrastructure;
 pub mod application;
 pub mod presentation;
 pub mod seeders;
+
 // <<< CUSTOM
 // The module's published contract (DTOs, AssetsQueryService, events). Was emitted but never
 // declared, so it compiled to nothing; declaring it makes the contract real.
 pub mod exports;
+// Hand-authored `impl AssetsModule` extension (safe default routes + lifecycle write surface +
+// query contract). Kept OUT of lib.rs's generated impl region so `metaphor make` regen can't
+// clobber it — see assets_module_ext.rs.
+pub mod assets_module_ext;
 // END CUSTOM
-
 // Re-exports for convenience - Domain entities
 pub use domain::entity::*;
 
@@ -39,10 +43,10 @@ pub use infrastructure::persistence::*;
 pub use application::service::AssetCategoryService;
 pub use application::service::AssetService;
 pub use application::service::AssetDepreciationEntryService;
+
 // <<< CUSTOM
 pub use application::service::{AssetEventSink, AssetWriteService, AssetsQueryServiceImpl, GlPostSink, LoggingSink};
 // END CUSTOM
-
 use std::sync::Arc;
 use axum::Router;
 use sqlx::PgPool;
@@ -51,7 +55,6 @@ use sqlx::PgPool;
 use exports::AssetsQueryService;
 use presentation::http::{create_asset_lifecycle_routes, AssetLifecycleState};
 // END CUSTOM
-
 /// Assets module configuration
 ///
 /// Use the builder pattern to configure and register this module:
@@ -59,12 +62,10 @@ use presentation::http::{create_asset_lifecycle_routes, AssetLifecycleState};
 /// ```text
 /// let assets = AssetsModule::builder()
 ///     .with_database(pool.clone())
-///     .with_gl_sink(Arc::new(my_gl_adapter))
 ///     .build()?;
 ///
-/// // Safe default (category CRUD + financial reads) merged with the validated
-/// // lifecycle verbs — the only path that may change financial state:
-/// let router = assets.all_crud_routes().merge(assets.lifecycle_routes());
+/// // Unguarded full CRUD (trusted/admin); compose a guarded router for production.
+/// let router = assets.all_crud_routes();
 /// ```
 pub struct AssetsModule {
     pub(crate) asset_category_service: Arc<AssetCategoryService>,
@@ -87,64 +88,32 @@ impl AssetsModule {
         AssetsModuleBuilder::new()
     }
 
-    /// The default, **safe** route surface: full CRUD on the `AssetCategory`
-    /// master, and **read-only** on the two engine-owned financial tables
-    /// (`Asset`, `AssetDepreciationEntry`).
-    ///
-    /// The fixed-asset lifecycle — the only path permitted to write financial
-    /// state — is mounted separately via [`Self::lifecycle_routes`] (register /
-    /// activate / depreciate / dispose). Compose a real deployment as
-    /// `all_crud_routes().merge(lifecycle_routes())`. Keeping the financial tables
-    /// read-only here means generic mutation can never bypass the lifecycle
-    /// engine's GL postings and silently desync the books from the ledger.
+    /// Mount ALL generated CRUD endpoints (12 per entity) with NO domain
+    /// validation — the fully **unguarded** surface. A well-formed request can
+    /// create invalid rows or soft-delete a referenced master out from under its
+    /// dependents. Prefer a guarded composition (read + validated writes) for any
+    /// real deployment; use this only in trusted/admin/seeding contexts.
     pub fn all_crud_routes(&self) -> Router {
         use presentation::http::{
             create_asset_category_routes,
-            create_asset_read_routes,
-            create_asset_depreciation_entry_read_routes,
+            create_asset_routes,
+            create_asset_depreciation_entry_routes,
         };
 
         Router::new()
             .merge(create_asset_category_routes(self.asset_category_service.clone()))
-            .merge(create_asset_read_routes(self.asset_service.clone()))
-            .merge(create_asset_depreciation_entry_read_routes(
-                self.asset_depreciation_entry_service.clone(),
-            ))
+            .merge(create_asset_routes(self.asset_service.clone()))
+            .merge(create_asset_depreciation_entry_routes(self.asset_depreciation_entry_service.clone()))
     }
 
     /// Deprecated alias for [`Self::all_crud_routes`]. `routes()` reads like
-    /// "the routes" but is really the safe default surface (category CRUD +
-    /// financial reads). Prefer the explicit [`Self::all_crud_routes`] name and
-    /// merge [`Self::lifecycle_routes`] for the write verbs.
-    #[deprecated(note = "confusing alias; use all_crud_routes() (+ lifecycle_routes() for the write verbs)")]
+    /// "the routes" but mounts UNVALIDATED generic CRUD on every entity — a naive
+    /// mount exposes unguarded writes. Compose a guarded router (read + validated
+    /// writes) for production, or call `all_crud_routes()` to opt into the full
+    /// unguarded surface explicitly.
+    #[deprecated(note = "mounts unvalidated generic CRUD on every entity; compose a guarded router for production, or call all_crud_routes() for the intentional full/unguarded surface")]
     pub fn routes(&self) -> Router {
         self.all_crud_routes()
-    }
-
-    /// The validated, GL-backed write surface — `register` / `activate` / `depreciate` /
-    /// `dispose`. These are the only verbs permitted to change financial state.
-    ///
-    /// Requires a `GlPostSink` supplied via [`AssetsModuleBuilder::with_gl_sink`]; composing
-    /// without one panics at startup (a wiring error, not a runtime condition).
-    ///
-    /// Compose a real deployment as `module.all_crud_routes().merge(module.lifecycle_routes())`.
-    pub fn lifecycle_routes(&self) -> Router {
-        let gl = self.gl_sink.clone().expect(
-            "AssetsModule::lifecycle_routes() requires a GlPostSink — pass one via \
-             AssetsModuleBuilder::with_gl_sink(...)",
-        );
-        let state = AssetLifecycleState {
-            write_svc: self.asset_write_service.clone(),
-            gl,
-            event_sink: self.event_sink.clone(),
-        };
-        create_asset_lifecycle_routes(state)
-    }
-
-    /// The published read contract for sibling modules (the now-implemented
-    /// [`AssetsQueryService`] over the module's DTOs).
-    pub fn query_service(&self) -> Arc<dyn AssetsQueryService> {
-        self.query.clone()
     }
 }
 

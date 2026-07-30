@@ -114,3 +114,65 @@ impl AssetsQueryService for AssetsQueryServiceImpl {
             .await
     }
 }
+
+// Entity → DTO conversions. Regen-safe home: this file is hand-authored (never overwritten by
+// `metaphor make`), unlike `exports/types.rs` whose CUSTOM block the generator resets. The query
+// methods above rely on these `From` impls to hand siblings the published DTO shapes.
+impl From<crate::domain::entity::Asset> for AssetDto {
+    fn from(a: crate::domain::entity::Asset) -> Self {
+        Self {
+            id: AssetId(a.id),
+            company_id: a.company_id,
+            asset_category_id: a.asset_category_id,
+            asset_name: a.asset_name,
+            asset_code: a.asset_code,
+            item_id: a.item_id,
+            branch_id: a.branch_id,
+            gross_purchase_amount: a.gross_purchase_amount,
+            salvage_value: a.salvage_value,
+            useful_life_months: a.useful_life_months,
+            opening_accumulated_depreciation: a.opening_accumulated_depreciation,
+            purchase_date: a.purchase_date,
+            available_for_use_date: a.available_for_use_date,
+            accumulated_depreciation: a.accumulated_depreciation,
+            net_book_value: a.net_book_value,
+            status: a.status,
+            metadata: serde_json::to_value(&a.metadata).unwrap_or_default(),
+        }
+    }
+}
+
+impl From<crate::domain::entity::AssetCategory> for AssetCategoryDto {
+    fn from(c: crate::domain::entity::AssetCategory) -> Self {
+        Self {
+            id: AssetCategoryId(c.id),
+            company_id: c.company_id,
+            category_name: c.category_name,
+            depreciation_method: c.depreciation_method,
+            useful_life_months: c.useful_life_months,
+            fixed_asset_account_id: c.fixed_asset_account_id,
+            accumulated_depreciation_account_id: c.accumulated_depreciation_account_id,
+            depreciation_expense_account_id: c.depreciation_expense_account_id,
+            disposal_gain_loss_account_id: c.disposal_gain_loss_account_id,
+            is_active: c.is_active,
+            metadata: serde_json::to_value(&c.metadata).unwrap_or_default(),
+        }
+    }
+}
+
+impl From<crate::domain::entity::AssetDepreciationEntry> for AssetDepreciationEntryDto {
+    fn from(e: crate::domain::entity::AssetDepreciationEntry) -> Self {
+        Self {
+            id: AssetDepreciationEntryId(e.id),
+            company_id: e.company_id,
+            asset_id: e.asset_id,
+            period_no: e.period_no,
+            schedule_date: e.schedule_date,
+            depreciation_amount: e.depreciation_amount,
+            accumulated_after: e.accumulated_after,
+            posted: e.posted,
+            posted_at: e.posted_at,
+            metadata: serde_json::to_value(&e.metadata).unwrap_or_default(),
+        }
+    }
+}
