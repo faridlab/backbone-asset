@@ -4,6 +4,15 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.3.1] - 2026-07-30
+
+### Fixed
+- `dispose_asset` no longer emits a zero-amount `Dr Accumulated Depreciation` line when
+  `accumulated_depreciation == 0` (the case where disposal wins the row-lock race before any
+  depreciation posts). That zero-amount debit was rejected by some ledgers, which stranded the
+  fixed-asset balance and made `ip6_dispose_vs_depreciation_serialize` flaky. The disposal post
+  stays balanced either way, so the asset now nets off the books deterministically under the race.
+
 ## [0.3.0] - 2026-07-30
 
 Delivers the fixed-asset bounded context found missing by the
@@ -46,13 +55,6 @@ sole write surface, and the published contract is real.
 
 ### Fixed
 - Mojibake em-dashes in `Cargo.toml` comments.
-
-### Known issues
-- `tests/integrity_probes.rs::ip6_dispose_vs_depreciation_serialize` is a flaky concurrency test
-  (pre-existing, unrelated to this release): when disposal wins the row-lock race before any
-  depreciation posts, `accumulated_depreciation = 0` yields a zero-amount accum-dep debit line in
-  the disposal posting, which can be rejected — stranding the fixed-asset balance. The engine and
-  the test are otherwise unchanged; a focused fix is tracked separately.
 
 ## [0.2.1]
 - Chunk `asset_write_service` into focused sibling `impl` blocks (pos-style hub).

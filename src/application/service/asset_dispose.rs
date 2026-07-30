@@ -76,10 +76,16 @@ impl AssetWriteService {
         let gain_loss = proceeds - nbv; // + gain, − loss
 
         // Build the balanced disposal envelope from the locked-in accumulated.
+        // The Dr Accum Dep line is emitted ONLY when something was actually depreciated — omitting it
+        // when accumulated == 0 (e.g. disposal wins the row-lock race before any depreciation posts)
+        // avoids a zero-amount debit line that some ledgers reject. The post stays balanced either way
+        // (a zero debit contributes nothing), so this also keeps dispose coherent under the race.
         let mut lines = vec![
-            GlPostLine::debit(cat.accum_dep, accumulated).with_description("Accumulated depreciation"),
             GlPostLine::credit(cat.fixed_asset, gross).with_description("Fixed asset"),
         ];
+        if accumulated > Decimal::ZERO {
+            lines.push(GlPostLine::debit(cat.accum_dep, accumulated).with_description("Accumulated depreciation"));
+        }
         if proceeds > Decimal::ZERO {
             lines.push(GlPostLine::debit(proceeds_account_id, proceeds).with_description("Disposal proceeds"));
         }
