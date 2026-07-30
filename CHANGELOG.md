@@ -4,6 +4,17 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.4.1] - 2026-07-30
+
+### Added
+- Scheduled (cross-tenant) depreciation sweep: `AssetWriteService::run_due_depreciation(up_to, gl, sink)`
+  enumerates every asset with an unposted period due on or before `up_to` — via the new
+  `asset.due_depreciation_assets` SECURITY DEFINER function (the job has no caller principal, so it
+  bypasses RLS for the enumeration), then re-scopes per asset for the idempotent writes. Returns a
+  `DueDepreciationSummary`. (council ops-ux-security-readiness #5b)
+- migration `20260426220008` (the enumeration function); ip8 regression test (cross-tenant sweep).
+- backbone-application runs the sweep as an hourly background job (tokio::spawn interval; idempotent).
+
 ## [0.4.0] - 2026-07-30
 
 ### Breaking (security — closes the cross-tenant GL-write primitive)

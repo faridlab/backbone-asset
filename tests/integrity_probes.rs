@@ -209,3 +209,41 @@ async fn ip7_dispose_without_catchup_is_coherent() {
         .bind(asset).fetch_one(&pool).await.unwrap();
     assert!(unposted > 0, "orphan plan rows remain but can never post (cosmetic, zero GL impact)");
 }
+
+/// IP-8 (council ops-ux-security-readiness #5b) — the scheduled depreciation sweep runs across ALL
+/// tenants (no caller principal): it enumerates via the `due_depreciation_assets` SECURITY DEFINER
+/// function and posts every due period, idempotently.
+#[tokio::test]
+async fn ip8_scheduled_depreciation_across_tenants() {
+    let pool = pool().await;
+    // Two tenants, each with one activated 12-period asset.
+    let (svc_a, co_a, acc_a, asset_a) = setup("1200", "0", 12).await;
+    let (svc_b, co_b, acc_b, asset_b) = setup("2400", "0", 12).await;
+    let gl = GlAdapter::new(pool.clone());
+    let sink = LoggingSink;
+    svc_a.activate_asset(asset_a, co_a, acc_a.funding, today(), &gl, &sink).await.unwrap();
+    svc_b.activate_asset(asset_b, co_b, acc_b.funding, today(), &gl, &sink).await.unwrap();
+
+    // The sweep is GLOBAL (cross-tenant, no caller principal), so it touches every due asset in the DB —
+    // assert on THESE two assets' own state rather than an absolute count.
+    let posted_count = |asset_id: Uuid| {
+        let p = pool.clone();
+        async move {
+            sqlx::query_scalar::<_, i64>(
+                "SELECT count(*) FROM asset.asset_depreciation_entries WHERE asset_id=$1 AND posted=true",
+            )
+            .bind(asset_id)
+            .fetch_one(&p)
+            .await
+            .unwrap()
+        }
+    };
+    let _ = svc_a.run_due_depreciation(far_future(), &gl, &sink).await.unwrap();
+    assert_eq!(posted_count(asset_a).await, 12, "tenant A fully depreciated by the cross-tenant sweep");
+    assert_eq!(posted_count(asset_b).await, 12, "tenant B fully depreciated by the cross-tenant sweep");
+
+    // Idempotent: a second sweep does not double-post (each period posts once via depr:{entry}).
+    let _ = svc_a.run_due_depreciation(far_future(), &gl, &sink).await.unwrap();
+    assert_eq!(posted_count(asset_a).await, 12, "idempotent — A not double-posted");
+    assert_eq!(posted_count(asset_b).await, 12, "idempotent — B not double-posted");
+}

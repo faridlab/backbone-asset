@@ -124,6 +124,23 @@ impl AssetDepreciationEntryRepository {
             .collect())
     }
 
+    /// The assets (across ALL tenants) with ≥1 unposted period due on or before `up_to`. For the
+    /// scheduled depreciation job, which has no caller principal and so cannot set `app.company_id` for
+    /// the enumeration. Calls the `asset.due_depreciation_assets` SECURITY DEFINER function (runs as the
+    /// table owner → bypasses RLS) and returns `(asset_id, company_id)` pairs; `run_depreciation` then
+    /// re-scopes per asset for the writes.
+    pub async fn list_due_assets(
+        &self,
+        pool: &PgPool,
+        up_to: chrono::DateTime<chrono::Utc>,
+    ) -> Result<Vec<(Uuid, Uuid)>, sqlx::Error> {
+        let rows = sqlx::query("SELECT asset_id, company_id FROM asset.due_depreciation_assets($1)")
+            .bind(up_to)
+            .fetch_all(pool)
+            .await?;
+        Ok(rows.iter().map(|r| (r.get("asset_id"), r.get("company_id"))).collect())
+    }
+
     /// Claim a period exactly once (CAS on `posted=false`) — the idempotence gate that makes a retry
     /// safe. Returns rows affected (0 = raced/retried; the caller skips it).
     ///

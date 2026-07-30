@@ -1,6 +1,6 @@
 [package]
 name = "backbone-asset"
-version = "0.4.0"
+version = "0.4.1"
 edition = "2021"
 description = "Minimal Backbone Framework module skeleton"
 

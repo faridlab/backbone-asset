@@ -127,3 +127,47 @@ impl AssetWriteService {
         Ok(DepreciationRunOutcome { periods_posted: posted, total_posted: money(total), fully_depreciated: fully })
     }
 }
+
+/// Summary of a scheduled (cross-tenant) depreciation sweep — what the background job reports.
+#[derive(Debug, Clone, PartialEq)]
+pub struct DueDepreciationSummary {
+    /// Distinct assets that had ≥1 period posted this sweep.
+    pub assets_depreciated: usize,
+    pub periods_posted: i32,
+    pub fully_depreciated: usize,
+}
+
+impl AssetWriteService {
+    /// Run depreciation for every asset (across ALL tenants) with a period due on or before `up_to`.
+    ///
+    /// For the scheduled job — there is no caller principal, so this enumerates via
+    /// `AssetDepreciationEntryRepository::list_due_assets` (a SECURITY DEFINER function that bypasses
+    /// RLS) and then re-scopes per asset for the idempotent writes via [`Self::run_depreciation`].
+    /// Safe to run repeatedly: each period posts at most once (`depr:{entry}` idempotency key).
+    pub async fn run_due_depreciation(
+        &self,
+        up_to: chrono::DateTime<chrono::Utc>,
+        gl: &dyn GlPostSink,
+        sink: &dyn AssetEventSink,
+    ) -> Result<DueDepreciationSummary, AssetError> {
+        let due = self.schedule.list_due_assets(&self.pool, up_to).await?;
+        let mut assets = 0usize;
+        let mut periods = 0i32;
+        let mut fully = 0usize;
+        for (asset_id, company_id) in due {
+            let o = self.run_depreciation(asset_id, company_id, up_to, gl, sink).await?;
+            if o.periods_posted > 0 {
+                assets += 1;
+            }
+            periods += o.periods_posted;
+            if o.fully_depreciated {
+                fully += 1;
+            }
+        }
+        Ok(DueDepreciationSummary {
+            assets_depreciated: assets,
+            periods_posted: periods,
+            fully_depreciated: fully,
+        })
+    }
+}

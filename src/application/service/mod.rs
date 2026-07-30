@@ -38,5 +38,6 @@ pub use asset_write_service::{
     AssetError, AssetWriteService, DepreciationRunOutcome, DisposalOutcome, NewAsset,
     NewAssetCategory,
 };
+pub use asset_depreciate::DueDepreciationSummary;
 pub use assets_query_service::AssetsQueryServiceImpl;
 // END CUSTOM
