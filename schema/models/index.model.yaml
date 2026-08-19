@@ -14,6 +14,10 @@ version: 2
 schema: asset
 description: "assets domain module"
 
+# ADR-0014 company fence: every entity here (assets, categories, depreciation
+# entries) is company-scoped and fenced strict. No exceptions.
+company_fence: strict
+
 config:
   database: postgresql
   soft_delete: true
