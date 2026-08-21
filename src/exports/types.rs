@@ -57,7 +57,7 @@ pub struct AssetCategoryDto {
     pub accumulated_depreciation_account_id: Uuid,
     pub depreciation_expense_account_id: Uuid,
     pub disposal_gain_loss_account_id: Uuid,
-    pub is_active: bool,
+    pub status: AssetCategoryStatus,
     pub metadata: serde_json::Value,
 }
 
@@ -66,6 +66,7 @@ pub struct AssetCategoryDto {
 pub struct AssetCategorySummary {
     pub id: AssetCategoryId,
     pub category_name: String,
+    pub status: AssetCategoryStatus,
 }
 
 /// Reference to AssetCategory for foreign key relationships

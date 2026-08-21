@@ -79,8 +79,8 @@ impl AssetCategoryRepository {
                 r#"INSERT INTO asset.asset_categories
                      (id, company_id, category_name, depreciation_method, useful_life_months,
                       fixed_asset_account_id, accumulated_depreciation_account_id,
-                      depreciation_expense_account_id, disposal_gain_loss_account_id, is_active)
-                   VALUES ($1,$2,$3,'straight_line'::depreciation_method,$4,$5,$6,$7,$8,true)"#,
+                      depreciation_expense_account_id, disposal_gain_loss_account_id, status)
+                   VALUES ($1,$2,$3,'straight_line'::depreciation_method,$4,$5,$6,$7,$8,'active')"#,
             )
             .bind(c.id).bind(c.company_id).bind(c.category_name).bind(c.useful_life_months)
             .bind(c.fixed_asset_account_id).bind(c.accumulated_depreciation_account_id)

@@ -32,7 +32,7 @@ impl TestDataGenerator for AssetCategoryTestData {
             "accumulated_depreciation_account_id": Uuid::new_v4().to_string(),
             "depreciation_expense_account_id": Uuid::new_v4().to_string(),
             "disposal_gain_loss_account_id": Uuid::new_v4().to_string(),
-            "is_active": false,
+            "status": "active",
             "metadata": json!({}),
         })
     }
@@ -49,7 +49,7 @@ impl TestDataGenerator for AssetCategoryTestData {
             "accumulated_depreciation_account_id": Uuid::new_v4().to_string(),
             "depreciation_expense_account_id": Uuid::new_v4().to_string(),
             "disposal_gain_loss_account_id": Uuid::new_v4().to_string(),
-            "is_active": false,
+            "status": "active",
             "metadata": json!({}),
         })
     }

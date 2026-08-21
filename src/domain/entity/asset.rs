@@ -74,7 +74,7 @@ pub struct Asset {
 impl Asset {
     /// Create a builder for Asset
     pub fn builder() -> AssetBuilder {
-        AssetBuilder::default()
+        <AssetBuilder as Default>::default()
     }
 
     /// Create a new Asset with required fields
@@ -442,7 +442,7 @@ impl AssetBuilder {
             available_for_use_date: self.available_for_use_date,
             accumulated_depreciation: self.accumulated_depreciation.unwrap_or(Decimal::from(0)),
             net_book_value: self.net_book_value.unwrap_or(Decimal::from(0)),
-            status: self.status.unwrap_or(AssetStatus::default()),
+            status: self.status.unwrap_or_default(),
             metadata: AuditMetadata::default(),
         })
     }

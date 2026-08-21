@@ -4,6 +4,7 @@ use sqlx::FromRow;
 use uuid::Uuid;
 
 use super::DepreciationMethod;
+use super::AssetCategoryStatus;
 use super::AuditMetadata;
 
 /// Strongly-typed ID for AssetCategory
@@ -58,7 +59,7 @@ pub struct AssetCategory {
     pub accumulated_depreciation_account_id: Uuid,
     pub depreciation_expense_account_id: Uuid,
     pub disposal_gain_loss_account_id: Uuid,
-    pub is_active: bool,
+    pub status: AssetCategoryStatus,
     #[serde(default)]
     #[sqlx(json)]
     pub metadata: AuditMetadata,
@@ -67,11 +68,11 @@ pub struct AssetCategory {
 impl AssetCategory {
     /// Create a builder for AssetCategory
     pub fn builder() -> AssetCategoryBuilder {
-        AssetCategoryBuilder::default()
+        <AssetCategoryBuilder as Default>::default()
     }
 
     /// Create a new AssetCategory with required fields
-    pub fn new(company_id: Uuid, category_name: String, depreciation_method: DepreciationMethod, useful_life_months: i32, fixed_asset_account_id: Uuid, accumulated_depreciation_account_id: Uuid, depreciation_expense_account_id: Uuid, disposal_gain_loss_account_id: Uuid, is_active: bool) -> Self {
+    pub fn new(company_id: Uuid, category_name: String, depreciation_method: DepreciationMethod, useful_life_months: i32, fixed_asset_account_id: Uuid, accumulated_depreciation_account_id: Uuid, depreciation_expense_account_id: Uuid, disposal_gain_loss_account_id: Uuid, status: AssetCategoryStatus) -> Self {
         Self {
             id: Uuid::new_v4(),
             company_id,
@@ -82,7 +83,7 @@ impl AssetCategory {
             accumulated_depreciation_account_id,
             depreciation_expense_account_id,
             disposal_gain_loss_account_id,
-            is_active,
+            status,
             metadata: AuditMetadata::default(),
         }
     }
@@ -137,6 +138,11 @@ impl AssetCategory {
         self.metadata.deleted_by.as_ref()
     }
 
+    /// Get the current status
+    pub fn status(&self) -> &AssetCategoryStatus {
+        &self.status
+    }
+
 
     // ==========================================================
     // Partial Update
@@ -170,8 +176,8 @@ impl AssetCategory {
                 "disposal_gain_loss_account_id" => {
                     if let Ok(v) = serde_json::from_value(value) { self.disposal_gain_loss_account_id = v; }
                 }
-                "is_active" => {
-                    if let Ok(v) = serde_json::from_value(value) { self.is_active = v; }
+                "status" => {
+                    if let Ok(v) = serde_json::from_value(value) { self.status = v; }
                 }
                 _ => {} // ignore unknown fields
             }
@@ -233,6 +239,7 @@ impl backbone_orm::EntityRepoMeta for AssetCategory {
         m.insert("depreciation_expense_account_id".to_string(), "uuid".to_string());
         m.insert("disposal_gain_loss_account_id".to_string(), "uuid".to_string());
         m.insert("depreciation_method".to_string(), "depreciation_method".to_string());
+        m.insert("status".to_string(), "asset_category_status".to_string());
         m
     }
     fn search_fields() -> &'static [&'static str] {
@@ -257,7 +264,7 @@ pub struct AssetCategoryBuilder {
     accumulated_depreciation_account_id: Option<Uuid>,
     depreciation_expense_account_id: Option<Uuid>,
     disposal_gain_loss_account_id: Option<Uuid>,
-    is_active: Option<bool>,
+    status: Option<AssetCategoryStatus>,
 }
 
 impl AssetCategoryBuilder {
@@ -309,9 +316,9 @@ impl AssetCategoryBuilder {
         self
     }
 
-    /// Set the is_active field (default: `true`)
-    pub fn is_active(mut self, value: bool) -> Self {
-        self.is_active = Some(value);
+    /// Set the status field (default: `AssetCategoryStatus::default()`)
+    pub fn status(mut self, value: AssetCategoryStatus) -> Self {
+        self.status = Some(value);
         self
     }
 
@@ -331,13 +338,13 @@ impl AssetCategoryBuilder {
             id: Uuid::new_v4(),
             company_id,
             category_name,
-            depreciation_method: self.depreciation_method.unwrap_or(DepreciationMethod::default()),
+            depreciation_method: self.depreciation_method.unwrap_or_default(),
             useful_life_months,
             fixed_asset_account_id,
             accumulated_depreciation_account_id,
             depreciation_expense_account_id,
             disposal_gain_loss_account_id,
-            is_active: self.is_active.unwrap_or(true),
+            status: self.status.unwrap_or_default(),
             metadata: AuditMetadata::default(),
         })
     }

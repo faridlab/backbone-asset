@@ -10,6 +10,11 @@ mod asset_depreciation_entry_repository;
 
 // Custom persistence modules
 // <<< CUSTOM
+// The hand-written asset SQL's parameter/projection types (see the repositories declared `user_owned`
+// in metaphor.codegen.yaml).
+pub use asset_category_repository::{CategoryAccountsRow, NewAssetCategoryRow};
+pub use asset_depreciation_entry_repository::{DueEntryRow, NewDepreciationEntryRow};
+pub use asset_repository::{AssetSnapshotRow, DisposalLockRow, NewAssetRow};
 // END CUSTOM
 
 // Re-exports
@@ -26,9 +31,4 @@ pub use backbone_orm::repository::{
 
 // Re-export custom persistence types
 // <<< CUSTOM
-// The hand-written asset SQL's parameter/projection types (see the repositories declared `user_owned`
-// in metaphor.codegen.yaml).
-pub use asset_category_repository::{CategoryAccountsRow, NewAssetCategoryRow};
-pub use asset_depreciation_entry_repository::{DueEntryRow, NewDepreciationEntryRow};
-pub use asset_repository::{AssetSnapshotRow, DisposalLockRow, NewAssetRow};
 // END CUSTOM

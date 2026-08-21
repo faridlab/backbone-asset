@@ -1131,7 +1131,7 @@ components:
         - accumulated_depreciation_account_id
         - depreciation_expense_account_id
         - disposal_gain_loss_account_id
-        - is_active
+        - status
         - metadata
       properties:
         id:
@@ -1160,8 +1160,8 @@ components:
         disposal_gain_loss_account_id:
           type: string
           format: uuid
-        is_active:
-          type: boolean
+        status:
+          type: string
         metadata:
           type: object
 
@@ -1189,7 +1189,7 @@ components:
         - accumulated_depreciation_account_id
         - depreciation_expense_account_id
         - disposal_gain_loss_account_id
-        - is_active
+        - status
         - metadata
       properties:
         company_id:
@@ -1215,8 +1215,8 @@ components:
         disposal_gain_loss_account_id:
           type: string
           format: uuid
-        is_active:
-          type: boolean
+        status:
+          type: string
         metadata:
           type: object
 
@@ -1231,7 +1231,7 @@ components:
         - accumulated_depreciation_account_id
         - depreciation_expense_account_id
         - disposal_gain_loss_account_id
-        - is_active
+        - status
         - metadata
       properties:
         company_id:
@@ -1257,8 +1257,8 @@ components:
         disposal_gain_loss_account_id:
           type: string
           format: uuid
-        is_active:
-          type: boolean
+        status:
+          type: string
         metadata:
           type: object
 
@@ -1288,8 +1288,8 @@ components:
         disposal_gain_loss_account_id:
           type: string
           format: uuid
-        is_active:
-          type: boolean
+        status:
+          type: string
         metadata:
           type: object
 

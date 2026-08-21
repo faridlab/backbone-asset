@@ -6,6 +6,7 @@ pub mod asset_category;
 pub mod asset;
 pub mod asset_depreciation_entry;
 pub mod depreciation_method;
+pub mod asset_category_status;
 pub mod asset_status;
 
 // Re-exports
@@ -19,6 +20,7 @@ pub use asset_depreciation_entry::AssetDepreciationEntry;
 pub use asset_depreciation_entry::AssetDepreciationEntryBuilder;
 pub use asset_depreciation_entry::AssetDepreciationEntryId;
 pub use depreciation_method::DepreciationMethod;
+pub use asset_category_status::AssetCategoryStatus;
 pub use asset_status::AssetStatus;
 
 // ==========================================================================

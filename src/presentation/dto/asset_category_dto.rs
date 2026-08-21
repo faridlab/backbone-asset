@@ -18,6 +18,7 @@ use validator::Validate;
 
 use crate::domain::entity::AssetCategory;
 use crate::domain::entity::AuditMetadata;
+use crate::domain::entity::AssetCategoryStatus;
 use crate::domain::entity::DepreciationMethod;
 
 // =============================================================================
@@ -57,9 +58,7 @@ pub struct CreateAssetCategoryDto {
     #[cfg_attr(feature = "openapi", schema(example = "550e8400-e29b-41d4-a716-446655440000"))]
     #[serde(alias = "disposal_gain_loss_account_id")]
     pub disposal_gain_loss_account_id: Uuid,
-    #[cfg_attr(feature = "openapi", schema(example = true))]
-    #[serde(alias = "is_active")]
-    pub is_active: bool,
+    pub status: AssetCategoryStatus,
 }
 
 // =============================================================================
@@ -99,9 +98,7 @@ pub struct UpdateAssetCategoryDto {
     #[cfg_attr(feature = "openapi", schema(example = "550e8400-e29b-41d4-a716-446655440000"))]
     #[serde(alias = "disposal_gain_loss_account_id")]
     pub disposal_gain_loss_account_id: Uuid,
-    #[cfg_attr(feature = "openapi", schema(example = true))]
-    #[serde(alias = "is_active")]
-    pub is_active: bool,
+    pub status: AssetCategoryStatus,
 }
 
 // =============================================================================
@@ -141,15 +138,14 @@ pub struct PatchAssetCategoryDto {
     #[cfg_attr(feature = "openapi", schema(example = "550e8400-e29b-41d4-a716-446655440000"))]
     #[serde(skip_serializing_if = "Option::is_none", alias = "disposal_gain_loss_account_id")]
     pub disposal_gain_loss_account_id: Option<Uuid>,
-    #[cfg_attr(feature = "openapi", schema(example = true))]
-    #[serde(skip_serializing_if = "Option::is_none", alias = "is_active")]
-    pub is_active: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub status: Option<AssetCategoryStatus>,
 }
 
 impl PatchAssetCategoryDto {
     /// Check if any field is set
     pub fn has_changes(&self) -> bool {
-        self.company_id.is_some() || self.category_name.is_some() || self.depreciation_method.is_some() || self.useful_life_months.is_some() || self.fixed_asset_account_id.is_some() || self.accumulated_depreciation_account_id.is_some() || self.depreciation_expense_account_id.is_some() || self.disposal_gain_loss_account_id.is_some() || self.is_active.is_some()
+        self.company_id.is_some() || self.category_name.is_some() || self.depreciation_method.is_some() || self.useful_life_months.is_some() || self.fixed_asset_account_id.is_some() || self.accumulated_depreciation_account_id.is_some() || self.depreciation_expense_account_id.is_some() || self.disposal_gain_loss_account_id.is_some() || self.status.is_some()
     }
 }
 
@@ -182,8 +178,7 @@ pub struct AssetCategoryResponseDto {
     pub depreciation_expense_account_id: Uuid,
     #[cfg_attr(feature = "openapi", schema(example = "550e8400-e29b-41d4-a716-446655440000"))]
     pub disposal_gain_loss_account_id: Uuid,
-    #[cfg_attr(feature = "openapi", schema(example = true))]
-    pub is_active: bool,
+    pub status: AssetCategoryStatus,
     pub metadata: AuditMetadata,
 }
 
@@ -263,7 +258,7 @@ impl From<AssetCategory> for AssetCategoryResponseDto {
             accumulated_depreciation_account_id: entity.accumulated_depreciation_account_id,
             depreciation_expense_account_id: entity.depreciation_expense_account_id,
             disposal_gain_loss_account_id: entity.disposal_gain_loss_account_id,
-            is_active: entity.is_active,
+            status: entity.status,
             metadata: entity.metadata,
         }
     }
@@ -294,7 +289,7 @@ impl From<CreateAssetCategoryDto> for AssetCategory {
             accumulated_depreciation_account_id: dto.accumulated_depreciation_account_id,
             depreciation_expense_account_id: dto.depreciation_expense_account_id,
             disposal_gain_loss_account_id: dto.disposal_gain_loss_account_id,
-            is_active: dto.is_active,
+            status: dto.status,
             metadata: AuditMetadata::default(),
         }
     }
@@ -312,7 +307,7 @@ impl From<&AssetCategory> for AssetCategoryResponseDto {
             accumulated_depreciation_account_id: entity.accumulated_depreciation_account_id.clone(),
             depreciation_expense_account_id: entity.depreciation_expense_account_id.clone(),
             disposal_gain_loss_account_id: entity.disposal_gain_loss_account_id.clone(),
-            is_active: entity.is_active.clone(),
+            status: entity.status.clone(),
             metadata: entity.metadata.clone(),
         }
     }
@@ -334,7 +329,7 @@ impl backbone_core::ApplyUpdateDto<UpdateAssetCategoryDto> for AssetCategory {
         self.accumulated_depreciation_account_id = dto.accumulated_depreciation_account_id;
         self.depreciation_expense_account_id = dto.depreciation_expense_account_id;
         self.disposal_gain_loss_account_id = dto.disposal_gain_loss_account_id;
-        self.is_active = dto.is_active;
+        self.status = dto.status;
         Ok(self)
     }
 }

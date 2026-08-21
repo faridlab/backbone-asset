@@ -53,17 +53,18 @@ models:
         type: uuid
         attributes: ["@required", "@exclude_from_foreign_key_check"]
         description: "Gain/loss on disposal account # logical FK to accounting.Account.id"
-      is_active:
-        type: bool
-        attributes: ["@default(true)"]
-        description: "Category is usable"
+      # replaces is_active (boolean flipped to lifecycle enum)
+      status:
+        type: AssetCategoryStatus
+        attributes: ["@default(active)"]
+        description: "Lifecycle (inactive categories are hidden from new asset registration; existing assets keep their depreciation policy)"
       metadata:
         type: Metadata
         attributes: ["@audit_metadata"]
         description: "Audit metadata"
     indexes:
       - type: index
-        fields: [company_id, is_active]
+        fields: [company_id, status]
 
   - name: Asset
     collection: assets
@@ -209,6 +210,15 @@ enums:
         description: "Reserved (deferred)"
       - name: written_down_value
         description: "Reserved (deferred — UU PPh tax basis is a tax overlay)"
+
+  - name: AssetCategoryStatus
+    description: "Lifecycle of an asset category"
+    variants:
+      - name: active
+        description: "Selectable for new asset registration"
+        default: true
+      - name: inactive
+        description: "Hidden from new registration; existing assets keep their depreciation policy"
 
   - name: AssetStatus
     description: "Fixed-asset lifecycle"

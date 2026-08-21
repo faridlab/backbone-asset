@@ -5,15 +5,18 @@
 //! These services provide the public API for other modules.
 //! They only expose read operations - writes go through events.
 
+
+// ============================================================================
+// CUSTOM SERVICES
+// ============================================================================
+
+// <<< CUSTOM SERVICES START >>>
+// The read-only query port siblings consume. Hand-authored here (inside the marker) because the
+// generator emits only this stub section; the trait itself is module API, not schema-derived.
 use anyhow::Result;
 use async_trait::async_trait;
-use uuid::Uuid;
 
 use super::types::*;
-
-// ============================================================================
-// QUERY SERVICE TRAIT
-// ============================================================================
 
 /// Public query service for Assets module
 ///
@@ -47,13 +50,5 @@ pub trait AssetsQueryService: Send + Sync {
 
     /// Check if AssetDepreciationEntry exists
     async fn asset_depreciation_entry_exists(&self, id: AssetDepreciationEntryId) -> Result<bool>;
-
 }
-
-// ============================================================================
-// CUSTOM SERVICES
-// ============================================================================
-
-// <<< CUSTOM SERVICES START >>>
-// Add custom public services here
 // <<< CUSTOM SERVICES END >>>

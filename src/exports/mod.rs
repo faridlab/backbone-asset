@@ -8,7 +8,7 @@
 //! ## Usage from other modules
 //!
 //! ```text
-//! use assets::exports::{AssetCategoryDto, AssetsQueryService};
+//! use assets::exports::{AssetCategoryDto};
 //! ```
 
 mod types;
@@ -36,9 +36,6 @@ pub use events::*;
 /// - `AssetDepreciationEntryDto` - Data transfer object for AssetDepreciationEntry
 /// - `AssetDepreciationEntrySummary` - Summary view of AssetDepreciationEntry
 /// - `AssetDepreciationEntryId` - Type-safe ID wrapper
-///
-/// ## Public Services
-/// - `AssetsQueryService` - Read-only queries
 ///
 /// ## Public Events
 /// - `AssetCategoryCreatedEvent` - Published when AssetCategory is created

@@ -65,7 +65,7 @@ pub struct AssetDepreciationEntry {
 impl AssetDepreciationEntry {
     /// Create a builder for AssetDepreciationEntry
     pub fn builder() -> AssetDepreciationEntryBuilder {
-        AssetDepreciationEntryBuilder::default()
+        <AssetDepreciationEntryBuilder as Default>::default()
     }
 
     /// Create a new AssetDepreciationEntry with required fields

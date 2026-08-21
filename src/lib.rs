@@ -23,16 +23,12 @@ pub mod infrastructure;
 pub mod application;
 pub mod presentation;
 pub mod seeders;
-
-// <<< CUSTOM
-// The module's published contract (DTOs, AssetsQueryService, events). Was emitted but never
-// declared, so it compiled to nothing; declaring it makes the contract real.
 pub mod exports;
 // Hand-authored `impl AssetsModule` extension (safe default routes + lifecycle write surface +
 // query contract). Kept OUT of lib.rs's generated impl region so `metaphor make` regen can't
 // clobber it — see assets_module_ext.rs.
 pub mod assets_module_ext;
-// END CUSTOM
+
 // Re-exports for convenience - Domain entities
 pub use domain::entity::*;
 
@@ -71,7 +67,7 @@ pub struct AssetsModule {
     pub(crate) asset_category_service: Arc<AssetCategoryService>,
     pub(crate) asset_service: Arc<AssetService>,
     pub(crate) asset_depreciation_entry_service: Arc<AssetDepreciationEntryService>,
-    // <<< CUSTOM
+    // <<< CUSTOM FIELDS
     /// The validated, GL-backed lifecycle engine (activate / depreciate / dispose).
     pub(crate) asset_write_service: Arc<AssetWriteService>,
     /// The GL-posting sink a composing service supplies; required to mount lifecycle routes.
@@ -111,9 +107,27 @@ impl AssetsModule {
     /// mount exposes unguarded writes. Compose a guarded router (read + validated
     /// writes) for production, or call `all_crud_routes()` to opt into the full
     /// unguarded surface explicitly.
-    #[deprecated(note = "mounts unvalidated generic CRUD on every entity; compose a guarded router for production, or call all_crud_routes() for the intentional full/unguarded surface")]
+    #[deprecated(note = "mounts unvalidated generic CRUD; prefer readonly_routes() + validated writes, or all_crud_routes() for the full/unguarded surface")]
     pub fn routes(&self) -> Router {
         self.all_crud_routes()
+    }
+
+    /// Read-only routes for every entity (GET endpoints only) — the safe base.
+    ///
+    /// Generic mutation can't reach here, so this surface cannot bypass a
+    /// validated write service's invariants. Use this as the production base and
+    /// merge validated write routes (or a write service's HTTP layer) onto it.
+    pub fn readonly_routes(&self) -> Router {
+        use presentation::http::{
+            create_asset_category_read_routes,
+            create_asset_read_routes,
+            create_asset_depreciation_entry_read_routes,
+        };
+
+        Router::new()
+            .merge(create_asset_category_read_routes(self.asset_category_service.clone()))
+            .merge(create_asset_read_routes(self.asset_service.clone()))
+            .merge(create_asset_depreciation_entry_read_routes(self.asset_depreciation_entry_service.clone()))
     }
 }
 

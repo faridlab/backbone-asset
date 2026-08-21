@@ -53,6 +53,7 @@ impl AssetsQueryService for AssetsQueryServiceImpl {
         Ok(c.map(|c| AssetCategorySummary {
             id: AssetCategoryId(c.id),
             category_name: c.category_name,
+            status: c.status,
         }))
     }
 
@@ -154,7 +155,7 @@ impl From<crate::domain::entity::AssetCategory> for AssetCategoryDto {
             accumulated_depreciation_account_id: c.accumulated_depreciation_account_id,
             depreciation_expense_account_id: c.depreciation_expense_account_id,
             disposal_gain_loss_account_id: c.disposal_gain_loss_account_id,
-            is_active: c.is_active,
+            status: c.status,
             metadata: serde_json::to_value(&c.metadata).unwrap_or_default(),
         }
     }

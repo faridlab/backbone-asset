@@ -51,4 +51,3 @@ async fn test_asset_depreciation_entry_api() {
         panic!("{} tests failed", failed.len());
     }
 }
-
