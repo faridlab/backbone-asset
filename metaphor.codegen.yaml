@@ -31,6 +31,13 @@ user_owned:
   - "tests/asset_golden_cases.rs"
   - "tests/asset_lifecycle_seam.rs"
   - "tests/integrity_probes.rs"
+  # Tenancy posture probe (ADR-0029): pins the half-fence the composing service's tenancy
+  # decorator completes — RLS flags armed, the module ships zero policies.
+  - "tests/tenancy_posture_probe.rs"
+  # The guarded company-artifact strip — the strip's ordering guard is hand-authored logic
+  # (decorator-first: never drop the last tenancy key on a populated table).
+  - "migrations/20260911130000_strip_tenancy.up.sql"
+  - "migrations/20260911130000_strip_tenancy.down.sql"
   - "scripts/**"
   # Hand-authored behavior (services + their HTTP surface). Examples:
   # - "src/application/service/onboarding_service.rs"

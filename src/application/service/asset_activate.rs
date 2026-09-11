@@ -11,7 +11,6 @@
 //! `AssetRepository` / `AssetCategoryRepository` / `AssetDepreciationEntryRepository`, whose custom
 //! methods take this service's transaction so the status flip + schedule inserts commit as one unit.
 
-use backbone_orm::company_scope;
 use rust_decimal::Decimal;
 use uuid::Uuid;
 
@@ -20,7 +19,7 @@ use crate::infrastructure::persistence::NewDepreciationEntryRow;
 use super::asset_events::{AssetActivated, AssetEvent, AssetEventSink};
 use super::asset_gl::{AccountingPostEnvelope, GlPostLine, GlPostSink};
 
-use super::asset_write_service::{money, AssetError, AssetWriteService};
+use super::asset_write_service::{legacy_company_echo, money, relay_ambient_scope, AssetError, AssetWriteService};
 
 impl AssetWriteService {
     /// Capitalize + schedule: post `Dr Fixed Asset · Cr Funding`, generate the straight-line schedule,
@@ -28,17 +27,16 @@ impl AssetWriteService {
     pub async fn activate_asset(
         &self,
         asset_id: Uuid,
-        company_id: Uuid,
         funding_account_id: Uuid,
         at: chrono::NaiveDate,
         gl: &dyn GlPostSink,
         sink: &dyn AssetEventSink,
     ) -> Result<(), AssetError> {
-        let a = self.load_asset(company_id, asset_id).await?;
+        let a = self.load_asset(asset_id).await?;
         if a.status != "draft" {
             return Ok(()); // already activated — idempotent no-op (the acquisition post was made once)
         }
-        let cat = self.load_category(a.company_id, a.category_id).await?;
+        let cat = self.load_category(a.category_id).await?;
         if cat.method != "straight_line" {
             return Err(AssetError::UnsupportedMethod);
         }
@@ -49,7 +47,9 @@ impl AssetWriteService {
         if a.opening == Decimal::ZERO {
             let env = AccountingPostEnvelope {
                 idempotency_key: format!("acquire:{asset_id}"),
-                company_id: a.company_id,
+                // The legacy tenancy twin echo (ADR-0029): accounting's post envelope still carries
+                // a company_id field; it keys no statement on it. Nil when no ambient scope is bound.
+                company_id: legacy_company_echo(),
                 branch_id: None,
                 source_type: "asset".into(),
                 source_id: Uuid::new_v5(&asset_id, b"asset:acquire"),
@@ -90,11 +90,10 @@ impl AssetWriteService {
             rows.push((out_period, date, amount, acc));
         }
 
-        // 3) Gate draft→active + insert the schedule.
-        // RLS scope (ADR-0008): the asset's company was read off its row above — bind it onto this
-        // transaction so the status flip and the schedule inserts pass the fence.
+        // 3) Gate draft→active + insert the schedule. The transaction this service opened carries no
+        // ambient org scope (task-local) — re-bind it so a composed deployment's fence sees the caller.
         let mut tx = self.pool.begin().await?;
-        company_scope::bind_company_on(&mut tx, a.company_id).await?;
+        relay_ambient_scope(&mut tx).await?;
         let moved = self.assets.claim_activation(&mut tx, asset_id, available).await?;
         if moved != 1 {
             tx.rollback().await?;
@@ -103,7 +102,6 @@ impl AssetWriteService {
         for (p, date, amount, acc_after) in &rows {
             self.schedule.insert_entry(&mut tx, &NewDepreciationEntryRow {
                 id: Uuid::new_v4(),
-                company_id: a.company_id,
                 asset_id,
                 period_no: *p,
                 schedule_date: *date,
@@ -114,7 +112,7 @@ impl AssetWriteService {
         tx.commit().await?;
         sink.publish(&AssetEvent::AssetActivated(AssetActivated {
             asset_id,
-            company_id: a.company_id,
+            company_id: legacy_company_echo(),
             gross_purchase_amount: a.gross,
             periods: n,
         }));

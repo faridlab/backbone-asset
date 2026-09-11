@@ -51,7 +51,6 @@ impl std::ops::Deref for AssetCategoryId {
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 pub struct AssetCategory {
     pub id: Uuid,
-    pub company_id: Uuid,
     pub category_name: String,
     pub depreciation_method: DepreciationMethod,
     pub useful_life_months: i32,
@@ -72,10 +71,9 @@ impl AssetCategory {
     }
 
     /// Create a new AssetCategory with required fields
-    pub fn new(company_id: Uuid, category_name: String, depreciation_method: DepreciationMethod, useful_life_months: i32, fixed_asset_account_id: Uuid, accumulated_depreciation_account_id: Uuid, depreciation_expense_account_id: Uuid, disposal_gain_loss_account_id: Uuid, status: AssetCategoryStatus) -> Self {
+    pub fn new(category_name: String, depreciation_method: DepreciationMethod, useful_life_months: i32, fixed_asset_account_id: Uuid, accumulated_depreciation_account_id: Uuid, depreciation_expense_account_id: Uuid, disposal_gain_loss_account_id: Uuid, status: AssetCategoryStatus) -> Self {
         Self {
             id: Uuid::new_v4(),
-            company_id,
             category_name,
             depreciation_method,
             useful_life_months,
@@ -152,9 +150,6 @@ impl AssetCategory {
     pub fn apply_patch(&mut self, fields: std::collections::HashMap<String, serde_json::Value>) {
         for (key, value) in fields {
             match key.as_str() {
-                "company_id" => {
-                    if let Ok(v) = serde_json::from_value(value) { self.company_id = v; }
-                }
                 "category_name" => {
                     if let Ok(v) = serde_json::from_value(value) { self.category_name = v; }
                 }
@@ -233,7 +228,6 @@ impl backbone_orm::EntityRepoMeta for AssetCategory {
     fn column_types() -> std::collections::HashMap<String, String> {
         let mut m = std::collections::HashMap::new();
         m.insert("id".to_string(), "uuid".to_string());
-        m.insert("company_id".to_string(), "uuid".to_string());
         m.insert("fixed_asset_account_id".to_string(), "uuid".to_string());
         m.insert("accumulated_depreciation_account_id".to_string(), "uuid".to_string());
         m.insert("depreciation_expense_account_id".to_string(), "uuid".to_string());
@@ -245,9 +239,6 @@ impl backbone_orm::EntityRepoMeta for AssetCategory {
     fn search_fields() -> &'static [&'static str] {
         &["category_name"]
     }
-    fn company_field() -> Option<&'static str> {
-        Some("company_id")
-    }
 }
 
 /// Builder for AssetCategory entity
@@ -256,7 +247,6 @@ impl backbone_orm::EntityRepoMeta for AssetCategory {
 /// System fields (id, metadata, timestamps) are auto-initialized.
 #[derive(Debug, Clone, Default)]
 pub struct AssetCategoryBuilder {
-    company_id: Option<Uuid>,
     category_name: Option<String>,
     depreciation_method: Option<DepreciationMethod>,
     useful_life_months: Option<i32>,
@@ -268,12 +258,6 @@ pub struct AssetCategoryBuilder {
 }
 
 impl AssetCategoryBuilder {
-    /// Set the company_id field (required)
-    pub fn company_id(mut self, value: Uuid) -> Self {
-        self.company_id = Some(value);
-        self
-    }
-
     /// Set the category_name field (required)
     pub fn category_name(mut self, value: String) -> Self {
         self.category_name = Some(value);
@@ -326,7 +310,6 @@ impl AssetCategoryBuilder {
     ///
     /// Returns Err if any required field without a default is missing.
     pub fn build(self) -> Result<AssetCategory, String> {
-        let company_id = self.company_id.ok_or_else(|| "company_id is required".to_string())?;
         let category_name = self.category_name.ok_or_else(|| "category_name is required".to_string())?;
         let useful_life_months = self.useful_life_months.ok_or_else(|| "useful_life_months is required".to_string())?;
         let fixed_asset_account_id = self.fixed_asset_account_id.ok_or_else(|| "fixed_asset_account_id is required".to_string())?;
@@ -336,7 +319,6 @@ impl AssetCategoryBuilder {
 
         Ok(AssetCategory {
             id: Uuid::new_v4(),
-            company_id,
             category_name,
             depreciation_method: self.depreciation_method.unwrap_or_default(),
             useful_life_months,

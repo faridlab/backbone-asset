@@ -44,7 +44,6 @@ pub struct AssetDepreciationEntryPaginatedResult {
 /// Filter parameters for list queries
 #[derive(Debug, Clone, Default)]
 pub struct AssetDepreciationEntryFilter {
-    pub company_id: Option<Uuid>,
     pub asset_id: Option<Uuid>,
     pub posted: Option<bool>,
 }
@@ -52,7 +51,7 @@ pub struct AssetDepreciationEntryFilter {
 impl AssetDepreciationEntryFilter {
     /// Check if any filter is set
     pub fn has_filters(&self) -> bool {
-        self.company_id.is_some() || self.asset_id.is_some() || self.posted.is_some()
+        self.asset_id.is_some() || self.posted.is_some()
     }
 }
 

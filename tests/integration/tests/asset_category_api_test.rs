@@ -24,7 +24,6 @@ impl TestDataGenerator for AssetCategoryTestData {
         let now = Utc::now().to_rfc3339();
         json!({
             "id": Uuid::new_v4().to_string(),
-            "company_id": Uuid::new_v4().to_string(),
             "category_name": format!("Test {}", Uuid::new_v4().to_string().split('-').next().unwrap()),
             "depreciation_method": "straight_line",
             "useful_life_months": 1,
@@ -41,7 +40,6 @@ impl TestDataGenerator for AssetCategoryTestData {
         let now = Utc::now().to_rfc3339();
         json!({
             "id": id,
-            "company_id": Uuid::new_v4().to_string(),
             "category_name": format!("Test {}", Uuid::new_v4().to_string().split('-').next().unwrap()),
             "depreciation_method": "straight_line",
             "useful_life_months": 1,

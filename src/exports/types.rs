@@ -49,7 +49,6 @@ impl From<AssetCategoryId> for Uuid {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AssetCategoryDto {
     pub id: AssetCategoryId,
-    pub company_id: Uuid,
     pub category_name: String,
     pub depreciation_method: DepreciationMethod,
     pub useful_life_months: i32,
@@ -113,7 +112,6 @@ impl From<AssetId> for Uuid {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AssetDto {
     pub id: AssetId,
-    pub company_id: Uuid,
     pub asset_category_id: Uuid,
     pub asset_name: String,
     pub asset_code: String,
@@ -183,7 +181,6 @@ impl From<AssetDepreciationEntryId> for Uuid {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AssetDepreciationEntryDto {
     pub id: AssetDepreciationEntryId,
-    pub company_id: Uuid,
     pub asset_id: Uuid,
     pub period_no: i32,
     pub schedule_date: DateTime<Utc>,

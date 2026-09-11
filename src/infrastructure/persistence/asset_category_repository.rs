@@ -12,7 +12,7 @@ use anyhow::Result;
 use sqlx::{PgPool, Row};
 use uuid::Uuid;
 
-use backbone_orm::company_scope;
+use backbone_orm::org_scope;
 
 use crate::domain::entity::AssetCategory;
 
@@ -45,7 +45,6 @@ impl AssetCategoryRepository {
 /// field: the INSERT hard-codes `'straight_line'` — the only method wired.
 pub struct NewAssetCategoryRow<'a> {
     pub id: Uuid,
-    pub company_id: Uuid,
     pub category_name: &'a str,
     pub useful_life_months: i32,
     pub fixed_asset_account_id: Uuid,
@@ -68,21 +67,20 @@ pub struct CategoryAccountsRow {
 impl AssetCategoryRepository {
     /// Define an asset category.
     ///
-    /// A write outside any transaction: takes the pool and runs `execute_scoped` so the RLS fence
-    /// (ADR-0008) applies. The caller wraps this in `with_company_scope(Some(company))` — the company is
-    /// on the DTO, and that scope is what satisfies the INSERT's WITH CHECK fence. The explicit
-    /// `company_id` bind stays as defense-in-depth.
+    /// A write outside any transaction: takes the pool and runs `org_scope::execute_scoped` so an
+    /// ambient org scope rides the request-dedicated connection when a composing service's decorator
+    /// has fenced these tables (ADR-0029); with no ambient scope the write is plain.
     pub async fn insert_category(&self, pool: &PgPool, c: &NewAssetCategoryRow<'_>) -> Result<(), sqlx::Error> {
-        company_scope::execute_scoped(
+        org_scope::execute_scoped(
             pool,
             sqlx::query(
                 r#"INSERT INTO asset.asset_categories
-                     (id, company_id, category_name, depreciation_method, useful_life_months,
+                     (id, category_name, depreciation_method, useful_life_months,
                       fixed_asset_account_id, accumulated_depreciation_account_id,
                       depreciation_expense_account_id, disposal_gain_loss_account_id, status)
-                   VALUES ($1,$2,$3,'straight_line'::depreciation_method,$4,$5,$6,$7,$8,'active')"#,
+                   VALUES ($1,$2,'straight_line'::depreciation_method,$3,$4,$5,$6,$7,'active')"#,
             )
-            .bind(c.id).bind(c.company_id).bind(c.category_name).bind(c.useful_life_months)
+            .bind(c.id).bind(c.category_name).bind(c.useful_life_months)
             .bind(c.fixed_asset_account_id).bind(c.accumulated_depreciation_account_id)
             .bind(c.depreciation_expense_account_id).bind(c.disposal_gain_loss_account_id),
         )
@@ -92,49 +90,43 @@ impl AssetCategoryRepository {
 
     /// The category's default useful life — what a new asset snapshots when it doesn't override it.
     ///
-    /// A read outside any transaction: takes the pool and runs `fetch_optional_scalar_scoped` so the RLS
-    /// fence (ADR-0008) applies. The caller wraps this in `with_company_scope(Some(company))`. The
-    /// explicit `company_id = $2` filter stays as defense-in-depth.
+    /// A read outside any transaction: id-only (ADR-0029), riding the request-dedicated connection
+    /// when an ambient org scope is bound, the plain pool otherwise.
     pub async fn find_useful_life(
         &self,
         pool: &PgPool,
         category_id: Uuid,
-        company_id: Uuid,
     ) -> Result<Option<i32>, sqlx::Error> {
-        company_scope::fetch_optional_scalar_scoped(
+        let row = org_scope::fetch_optional_row_scoped(
             pool,
-            sqlx::query_scalar(
+            sqlx::query(
                 r#"SELECT useful_life_months FROM asset.asset_categories
-                   WHERE id=$1 AND company_id=$2 AND (metadata->>'deleted_at') IS NULL"#,
+                   WHERE id=$1 AND (metadata->>'deleted_at') IS NULL"#,
             )
-            .bind(category_id)
-            .bind(company_id),
+            .bind(category_id),
         )
-        .await
+        .await?;
+        Ok(row.map(|r| r.get::<i32, _>("useful_life_months")))
     }
 
     /// The category's method + account map.
     ///
-    /// The company is a parameter (the caller read it off the asset row), so this is correct for
-    /// non-request callers (the depreciation job) too — the caller wraps it in
-    /// `with_company_scope(Some(company_id))`. The explicit `company_id = $2` filter stays as
-    /// defense-in-depth.
+    /// Id-only (ADR-0029), riding the request-dedicated connection when an ambient org scope is
+    /// bound, the plain pool otherwise — correct for non-request callers (the depreciation job) too.
     pub async fn find_accounts(
         &self,
         pool: &PgPool,
         category_id: Uuid,
-        company_id: Uuid,
     ) -> Result<Option<CategoryAccountsRow>, sqlx::Error> {
-        let row = company_scope::fetch_optional_row_scoped(
+        let row = org_scope::fetch_optional_row_scoped(
             pool,
             sqlx::query(
                 r#"SELECT depreciation_method::text AS method, useful_life_months,
                           fixed_asset_account_id, accumulated_depreciation_account_id,
                           depreciation_expense_account_id, disposal_gain_loss_account_id
-                   FROM asset.asset_categories WHERE id=$1 AND company_id=$2 AND (metadata->>'deleted_at') IS NULL"#,
+                   FROM asset.asset_categories WHERE id=$1 AND (metadata->>'deleted_at') IS NULL"#,
             )
-            .bind(category_id)
-            .bind(company_id),
+            .bind(category_id),
         )
         .await?;
         Ok(row.map(|r| CategoryAccountsRow {

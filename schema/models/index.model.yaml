@@ -14,9 +14,12 @@ version: 2
 schema: asset
 description: "assets domain module"
 
-# ADR-0014 company fence: every entity here (assets, categories, depreciation
-# entries) is company-scoped and fenced strict. No exceptions.
-company_fence: strict
+# Tenancy: none, by design (ADR-0029). The module is tenant-agnostic and reusable —
+# it ships no scoping column and no fence declaration. A composing backend-service
+# that wants these tables org-scoped declares them in its tenancy.yaml; the
+# decorator installs org_unit_id, the RLS policy, and the org-scoped per-unit
+# indexes (the asset-code uniqueness and the category/status listing indexes) at
+# composition time.
 
 config:
   database: postgresql

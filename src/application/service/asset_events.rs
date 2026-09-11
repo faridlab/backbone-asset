@@ -2,6 +2,10 @@
 //!
 //! The lifecycle publishes these as the asset is capitalized, depreciated, and retired. A consumer
 //! (a fixed-asset register report, the tax-depreciation overlay) subscribes without calling back.
+//!
+//! **Tenancy (ADR-0029).** The module keys no statement on a tenant; the `company_id` these
+//! payloads carry is the LEGACY TWIN — the ambient org scope's legacy company id echoed for
+//! still-company-fenced consumers (until those strip too), nil when no scope is bound.
 
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
@@ -12,6 +16,7 @@ use uuid::Uuid;
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct AssetActivated {
     pub asset_id: Uuid,
+    /// Legacy tenant twin (ADR-0029) for unstripped consumers — see the module docs.
     pub company_id: Uuid,
     pub gross_purchase_amount: Decimal,
     pub periods: i32,
@@ -22,6 +27,7 @@ pub struct AssetActivated {
 pub struct DepreciationPosted {
     pub asset_id: Uuid,
     pub entry_id: Uuid,
+    /// Legacy tenant twin (ADR-0029) for unstripped consumers — see the module docs.
     pub company_id: Uuid,
     pub period_no: i32,
     pub amount: Decimal,
@@ -33,6 +39,7 @@ pub struct DepreciationPosted {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct AssetDisposed {
     pub asset_id: Uuid,
+    /// Legacy tenant twin (ADR-0029) for unstripped consumers — see the module docs.
     pub company_id: Uuid,
     pub proceeds: Decimal,
     pub net_book_value: Decimal,

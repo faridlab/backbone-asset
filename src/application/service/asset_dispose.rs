@@ -11,27 +11,24 @@
 //! Per the module's 4-layer rule this file holds no SQL — the statements live on
 //! `AssetRepository` / `AssetCategoryRepository`.
 
-use backbone_orm::company_scope;
 use rust_decimal::Decimal;
 use uuid::Uuid;
 
 use super::asset_events::{AssetDisposed, AssetEvent, AssetEventSink};
 use super::asset_gl::{AccountingPostEnvelope, GlPostLine, GlPostSink};
 
-use super::asset_write_service::{AssetError, AssetWriteService, DisposalOutcome};
+use super::asset_write_service::{legacy_company_echo, relay_ambient_scope, AssetError, AssetWriteService, DisposalOutcome};
 
 impl AssetWriteService {
     /// Dispose the asset: remove it from the books and recognise gain/loss.
     /// `Dr Accum Dep + Dr Proceeds ± gain/loss · Cr Fixed Asset`. Idempotent (post + status gate).
     ///
-    /// `company_id` scopes the lookup for the same reason as [`Self::run_depreciation`]: the caller's
-    /// tenant must own the row, not merely be authenticated. The locked read runs under the explicit
-    /// scope, so a mismatched tenant's asset is simply not found — defense-in-depth on top of the
-    /// RLS fence. Event/job callers (the disposal handler) must pass the event's company explicitly.
+    /// The lookup is id-only (ADR-0029): on a composed deployment the caller's ambient org scope —
+    /// re-bound onto the transaction below — fences the locked read, so an out-of-scope asset is
+    /// simply not found.
     pub async fn dispose_asset(
         &self,
         asset_id: Uuid,
-        company_id: Uuid,
         proceeds: Decimal,
         proceeds_account_id: Uuid,
         at: chrono::NaiveDate,
@@ -46,13 +43,10 @@ impl AssetWriteService {
         // accumulated between this read and the disposal post — the Dr Accum Dep amount always matches
         // what depreciation actually credited, and the asset nets off the books (council 2026-07-06).
         //
-        // RLS scope (ADR-0008): company on the parameter — bind it explicitly onto this transaction
-        // so the row lock, the post, and the status flip all pass the RLS fence. The locked read
-        // refuses another company's asset (returns None → NotFound); that is defense-in-depth on top
-        // of the RLS fence. An event/job caller can no longer forget to scope — `company_id` is on
-        // the signature.
+        // The transaction this service opened carries no ambient org scope (task-local) — re-bind it
+        // so a composed deployment's fence sees the caller on the row lock and the status flip.
         let mut tx = self.pool.begin().await?;
-        company_scope::bind_company_on(&mut tx, company_id).await?;
+        relay_ambient_scope(&mut tx).await?;
         let row = self
             .assets
             .lock_for_disposal(&mut tx, asset_id)
@@ -72,7 +66,7 @@ impl AssetWriteService {
         }
         let category_id: Uuid = row.asset_category_id;
         let asset_code: String = row.asset_code;
-        let cat = self.load_category(company_id, category_id).await?;
+        let cat = self.load_category(category_id).await?;
         let gain_loss = proceeds - nbv; // + gain, − loss
 
         // Build the balanced disposal envelope from the locked-in accumulated.
@@ -96,7 +90,8 @@ impl AssetWriteService {
         }
         let env = AccountingPostEnvelope {
             idempotency_key: format!("dispose:{asset_id}"),
-            company_id,
+            // The legacy tenancy twin echo (ADR-0029): nil when no ambient scope is bound.
+            company_id: legacy_company_echo(),
             branch_id: None,
             source_type: "asset".into(),
             source_id: Uuid::new_v5(&asset_id, b"asset:dispose"),
@@ -120,7 +115,7 @@ impl AssetWriteService {
         tx.commit().await?;
         sink.publish(&AssetEvent::AssetDisposed(AssetDisposed {
             asset_id,
-            company_id,
+            company_id: legacy_company_echo(),
             proceeds,
             net_book_value: nbv,
             gain_loss,

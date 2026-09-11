@@ -24,7 +24,6 @@ impl TestDataGenerator for AssetDepreciationEntryTestData {
         let now = Utc::now().to_rfc3339();
         json!({
             "id": Uuid::new_v4().to_string(),
-            "company_id": Uuid::new_v4().to_string(),
             "asset_id": Uuid::new_v4().to_string(),
             "period_no": 1,
             "schedule_date": now,
@@ -40,7 +39,6 @@ impl TestDataGenerator for AssetDepreciationEntryTestData {
         let now = Utc::now().to_rfc3339();
         json!({
             "id": id,
-            "company_id": Uuid::new_v4().to_string(),
             "asset_id": Uuid::new_v4().to_string(),
             "period_no": 1,
             "schedule_date": now,

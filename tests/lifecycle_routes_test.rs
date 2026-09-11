@@ -13,10 +13,11 @@ use axum::body::{to_bytes, Body};
 use axum::http::{Method, Request, StatusCode};
 use backbone_asset::application::service::{AssetWriteService, NewAssetCategory};
 use backbone_asset::AssetsModule;
-// The lifecycle handlers source `company_id` from a verified `CompanyContext` (set by the consumer's
-// `company_auth` middleware). The test bypasses the JWT and injects the context directly into the
-// request extensions — the same place the extractor reads it from.
-use backbone_auth::company::CompanyContext;
+// The lifecycle handlers trust an authenticated `OrgContext` (set by the consumer's auth
+// middleware). The test bypasses the JWT and injects the context directly into the request
+// extensions — the same place the extractor reads it from. The module keys no statement on the
+// tenant (ADR-0029): the acting unit is auth/trace metadata only.
+use backbone_auth::org::OrgContext;
 use common::{pool, CountingGl};
 use serde_json::{json, Value};
 use tower::ServiceExt;
@@ -31,16 +32,17 @@ fn req(method: Method, uri: &str, body: Value) -> Request<Body> {
         .unwrap()
 }
 
-/// Like `req` but injects a verified `CompanyContext` for `company` into the request extensions,
-/// standing in for the `company_auth` middleware on the HTTP path.
-fn req_as(company: Uuid, method: Method, uri: &str, body: Value) -> Request<Body> {
+/// Like `req` but injects a verified `OrgContext` into the request extensions, standing in for
+/// the consumer's auth middleware on the HTTP path.
+fn req_as(acting_unit: Uuid, method: Method, uri: &str, body: Value) -> Request<Body> {
     Request::builder()
         .method(method)
         .uri(uri)
         .header("content-type", "application/json")
-        .extension(CompanyContext {
-            company_id: company,
-            branch_id: None,
+        .extension(OrgContext {
+            acting_unit_id: acting_unit,
+            entitled_units: vec![],
+            legacy_company_id: None,
             user_id: "test".into(),
         })
         .body(Body::from(body.to_string()))
@@ -81,14 +83,13 @@ async fn financial_write_surface_is_read_only_by_default() {
 #[tokio::test]
 async fn lifecycle_verbs_post_through_the_sink() {
     let pool = pool().await;
-    let company = Uuid::new_v4();
+    let acting_unit = Uuid::new_v4();
     let gl = std::sync::Arc::new(CountingGl::new());
 
     // Category setup via a standalone write service (the module's field is pub(crate)).
     let setup = AssetWriteService::new(pool.clone());
     let cat = setup
         .create_category(NewAssetCategory {
-            company_id: company,
             category_name: "Machinery".into(),
             useful_life_months: 12,
             // CountingGl never posts, so the account ids are never exercised — arbitrary uuids are
@@ -108,11 +109,11 @@ async fn lifecycle_verbs_post_through_the_sink() {
         .unwrap();
     let router = module.read_only_routes().merge(module.lifecycle_routes());
 
-    // 1) register a draft asset (validated path). company_id comes from the injected CompanyContext.
+    // 1) register a draft asset (validated path). The acting unit comes from the injected OrgContext.
     let r = router
         .clone()
         .oneshot(req_as(
-            company,
+            acting_unit,
             Method::POST,
             "/assets/register",
             json!({
@@ -135,7 +136,7 @@ async fn lifecycle_verbs_post_through_the_sink() {
     let r = router
         .clone()
         .oneshot(req_as(
-            company,
+            acting_unit,
             Method::POST,
             &format!("/assets/{id}/activate"),
             json!({ "funding_account_id": Uuid::new_v4(), "at": "2025-01-01" }),
@@ -149,7 +150,7 @@ async fn lifecycle_verbs_post_through_the_sink() {
     let r = router
         .clone()
         .oneshot(req_as(
-            company,
+            acting_unit,
             Method::POST,
             &format!("/assets/{id}/depreciate"),
             json!({ "up_to": "2030-01-01T00:00:00Z" }),
@@ -165,7 +166,7 @@ async fn lifecycle_verbs_post_through_the_sink() {
     let r = router
         .clone()
         .oneshot(req_as(
-            company,
+            acting_unit,
             Method::POST,
             &format!("/assets/{id}/dispose"),
             json!({

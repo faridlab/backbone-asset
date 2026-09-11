@@ -34,9 +34,6 @@ use crate::domain::entity::DepreciationMethod;
 #[cfg_attr(feature = "validation", derive(Validate))]
 #[serde(rename_all = "camelCase")]
 pub struct CreateAssetCategoryDto {
-    #[cfg_attr(feature = "openapi", schema(example = "550e8400-e29b-41d4-a716-446655440000"))]
-    #[serde(alias = "company_id")]
-    pub company_id: Uuid,
     #[cfg_attr(feature = "validation", validate(length(max = 140)))]
     #[cfg_attr(feature = "openapi", schema(example = "example"))]
     #[serde(alias = "category_name")]
@@ -74,9 +71,6 @@ pub struct CreateAssetCategoryDto {
 #[cfg_attr(feature = "validation", derive(Validate))]
 #[serde(rename_all = "camelCase")]
 pub struct UpdateAssetCategoryDto {
-    #[cfg_attr(feature = "openapi", schema(example = "550e8400-e29b-41d4-a716-446655440000"))]
-    #[serde(alias = "company_id")]
-    pub company_id: Uuid,
     #[cfg_attr(feature = "validation", validate(length(max = 140)))]
     #[cfg_attr(feature = "openapi", schema(example = "example"))]
     #[serde(alias = "category_name")]
@@ -114,9 +108,6 @@ pub struct UpdateAssetCategoryDto {
 #[cfg_attr(feature = "validation", derive(Validate))]
 #[serde(rename_all = "camelCase")]
 pub struct PatchAssetCategoryDto {
-    #[cfg_attr(feature = "openapi", schema(example = "550e8400-e29b-41d4-a716-446655440000"))]
-    #[serde(skip_serializing_if = "Option::is_none", alias = "company_id")]
-    pub company_id: Option<Uuid>,
     #[cfg_attr(feature = "validation", validate(length(max = 140)))]
     #[cfg_attr(feature = "openapi", schema(example = "example"))]
     #[serde(skip_serializing_if = "Option::is_none", alias = "category_name")]
@@ -145,7 +136,7 @@ pub struct PatchAssetCategoryDto {
 impl PatchAssetCategoryDto {
     /// Check if any field is set
     pub fn has_changes(&self) -> bool {
-        self.company_id.is_some() || self.category_name.is_some() || self.depreciation_method.is_some() || self.useful_life_months.is_some() || self.fixed_asset_account_id.is_some() || self.accumulated_depreciation_account_id.is_some() || self.depreciation_expense_account_id.is_some() || self.disposal_gain_loss_account_id.is_some() || self.status.is_some()
+        self.category_name.is_some() || self.depreciation_method.is_some() || self.useful_life_months.is_some() || self.fixed_asset_account_id.is_some() || self.accumulated_depreciation_account_id.is_some() || self.depreciation_expense_account_id.is_some() || self.disposal_gain_loss_account_id.is_some() || self.status.is_some()
     }
 }
 
@@ -163,8 +154,6 @@ impl PatchAssetCategoryDto {
 pub struct AssetCategoryResponseDto {
     #[cfg_attr(feature = "openapi", schema(example = "550e8400-e29b-41d4-a716-446655440000"))]
     pub id: Uuid,
-    #[cfg_attr(feature = "openapi", schema(example = "550e8400-e29b-41d4-a716-446655440000"))]
-    pub company_id: Uuid,
     #[cfg_attr(feature = "openapi", schema(example = "example"))]
     pub category_name: String,
     pub depreciation_method: DepreciationMethod,
@@ -236,9 +225,9 @@ impl AssetCategoryListResponseDto {
 #[serde(rename_all = "camelCase")]
 pub struct AssetCategorySummaryDto {
     pub id: Uuid,
-    pub company_id: Uuid,
     pub category_name: String,
     pub depreciation_method: DepreciationMethod,
+    pub useful_life_months: i32,
     pub created_at: Option<DateTime<Utc>>,
 }
 
@@ -250,7 +239,6 @@ impl From<AssetCategory> for AssetCategoryResponseDto {
     fn from(entity: AssetCategory) -> Self {
         Self {
             id: entity.id,
-            company_id: entity.company_id,
             category_name: entity.category_name,
             depreciation_method: entity.depreciation_method,
             useful_life_months: entity.useful_life_months,
@@ -269,9 +257,9 @@ impl From<AssetCategory> for AssetCategorySummaryDto {
         let created_at = backbone_core::PersistentEntity::created_at(&entity);
         Self {
             id: entity.id,
-            company_id: entity.company_id,
             category_name: entity.category_name,
             depreciation_method: entity.depreciation_method,
+            useful_life_months: entity.useful_life_months,
             created_at,
         }
     }
@@ -281,7 +269,6 @@ impl From<CreateAssetCategoryDto> for AssetCategory {
     fn from(dto: CreateAssetCategoryDto) -> Self {
         Self {
             id: Uuid::new_v4(),
-            company_id: dto.company_id,
             category_name: dto.category_name,
             depreciation_method: dto.depreciation_method,
             useful_life_months: dto.useful_life_months,
@@ -299,7 +286,6 @@ impl From<&AssetCategory> for AssetCategoryResponseDto {
     fn from(entity: &AssetCategory) -> Self {
         Self {
             id: entity.id.clone(),
-            company_id: entity.company_id.clone(),
             category_name: entity.category_name.clone(),
             depreciation_method: entity.depreciation_method.clone(),
             useful_life_months: entity.useful_life_months.clone(),
@@ -321,7 +307,6 @@ impl backbone_core::FromCreateDto<CreateAssetCategoryDto> for AssetCategory {
 
 impl backbone_core::ApplyUpdateDto<UpdateAssetCategoryDto> for AssetCategory {
     fn apply_update(mut self, dto: UpdateAssetCategoryDto) -> backbone_core::ServiceResult<Self> {
-        self.company_id = dto.company_id;
         self.category_name = dto.category_name;
         self.depreciation_method = dto.depreciation_method;
         self.useful_life_months = dto.useful_life_months;

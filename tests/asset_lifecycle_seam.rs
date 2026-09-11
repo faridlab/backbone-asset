@@ -17,15 +17,15 @@ use common::*;
 use rust_decimal::Decimal;
 use uuid::Uuid;
 
-async fn make(pool: &sqlx::PgPool, svc: &AssetWriteService, company: Uuid, acc: &AssetAccounts, gross: &str, salvage: &str, life: i32) -> Uuid {
+async fn make(pool: &sqlx::PgPool, svc: &AssetWriteService, acc: &AssetAccounts, gross: &str, salvage: &str, life: i32) -> Uuid {
     let cat = svc.create_category(NewAssetCategory {
-        company_id: company, category_name: "Machinery".into(), useful_life_months: life,
+        category_name: "Machinery".into(), useful_life_months: life,
         fixed_asset_account_id: acc.fixed_asset, accumulated_depreciation_account_id: acc.accum_dep,
         depreciation_expense_account_id: acc.dep_expense, disposal_gain_loss_account_id: acc.gain_loss,
     }).await.unwrap();
     let _ = pool;
     svc.create_asset(NewAsset {
-        company_id: company, asset_category_id: cat, asset_name: "M".into(),
+        asset_category_id: cat, asset_name: "M".into(),
         asset_code: format!("A-{}", &Uuid::new_v4().to_string()[..8]),
         item_id: None, branch_id: None, gross_purchase_amount: dec(gross), salvage_value: dec(salvage),
         opening_accumulated_depreciation: dec("0"),
@@ -45,17 +45,16 @@ async fn alseam1_full_life_then_disposal_nets_off_books() {
     let svc = AssetWriteService::new(pool.clone());
     let gl = GlAdapter::new(pool.clone());
     let sink = LoggingSink;
-    let company = Uuid::new_v4();
-    let acc = asset_accounts(&pool, company).await;
-    let asset = make(&pool, &svc, company, &acc, "12000", "0", 12).await;
+    let acc = asset_accounts(&pool).await;
+    let asset = make(&pool, &svc, &acc, "12000", "0", 12).await;
 
     // Capitalize: Dr Fixed Asset 12,000 · Cr Funding 12,000.
-    svc.activate_asset(asset, company, acc.funding, today(), &gl, &sink).await.unwrap();
+    svc.activate_asset(asset, acc.funding, today(), &gl, &sink).await.unwrap();
     assert_eq!(balance(&pool, acc.fixed_asset).await, dec("12000.00"));
     assert_eq!(balance(&pool, acc.funding).await, dec("-12000.00"));
 
     // Depreciate the whole life: Σ = depreciable 12,000.
-    let r = svc.run_depreciation(asset, company, far(), &gl, &sink).await.unwrap();
+    let r = svc.run_depreciation(asset, far(), &gl, &sink).await.unwrap();
     assert_eq!(r.periods_posted, 12);
     assert_eq!(r.total_posted, dec("12000.00"), "Σ depreciation == depreciable base");
     assert!(r.fully_depreciated);
@@ -63,7 +62,7 @@ async fn alseam1_full_life_then_disposal_nets_off_books() {
     assert_eq!(balance(&pool, acc.accum_dep).await, dec("-12000.00"));
 
     // Dispose at a gain (NBV = 0, proceeds 3,000 → gain 3,000).
-    let d = svc.dispose_asset(asset, company, dec("3000"), acc.proceeds, today(), &gl, &sink).await.unwrap();
+    let d = svc.dispose_asset(asset, dec("3000"), acc.proceeds, today(), &gl, &sink).await.unwrap();
     assert_eq!(d.net_book_value, dec("0"));
     assert_eq!(d.gain_loss, dec("3000"));
 
@@ -86,18 +85,17 @@ async fn alseam2_early_disposal_at_a_loss() {
     let svc = AssetWriteService::new(pool.clone());
     let gl = GlAdapter::new(pool.clone());
     let sink = LoggingSink;
-    let company = Uuid::new_v4();
-    let acc = asset_accounts(&pool, company).await;
-    let asset = make(&pool, &svc, company, &acc, "1200", "0", 12).await;
-    svc.activate_asset(asset, company, acc.funding, today(), &gl, &sink).await.unwrap();
+    let acc = asset_accounts(&pool).await;
+    let asset = make(&pool, &svc, &acc, "1200", "0", 12).await;
+    svc.activate_asset(asset, acc.funding, today(), &gl, &sink).await.unwrap();
 
     // ~3 months → 3 × 100 = 300 depreciated; NBV = 900.
-    let r = svc.run_depreciation(asset, company, now() + chrono::Duration::days(95), &gl, &sink).await.unwrap();
+    let r = svc.run_depreciation(asset, now() + chrono::Duration::days(95), &gl, &sink).await.unwrap();
     assert_eq!(r.periods_posted, 3);
     assert_eq!(r.total_posted, dec("300.00"));
 
     // Dispose for 500 → loss = 500 − 900 = −400.
-    let d = svc.dispose_asset(asset, company, dec("500"), acc.proceeds, today(), &gl, &sink).await.unwrap();
+    let d = svc.dispose_asset(asset, dec("500"), acc.proceeds, today(), &gl, &sink).await.unwrap();
     assert_eq!(d.net_book_value, dec("900"));
     assert_eq!(d.gain_loss, dec("-400"));
 

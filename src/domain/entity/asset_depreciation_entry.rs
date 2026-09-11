@@ -49,7 +49,6 @@ impl std::ops::Deref for AssetDepreciationEntryId {
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 pub struct AssetDepreciationEntry {
     pub id: Uuid,
-    pub company_id: Uuid,
     pub asset_id: Uuid,
     pub period_no: i32,
     pub schedule_date: DateTime<Utc>,
@@ -69,10 +68,9 @@ impl AssetDepreciationEntry {
     }
 
     /// Create a new AssetDepreciationEntry with required fields
-    pub fn new(company_id: Uuid, asset_id: Uuid, period_no: i32, schedule_date: DateTime<Utc>, depreciation_amount: Decimal, accumulated_after: Decimal, posted: bool) -> Self {
+    pub fn new(asset_id: Uuid, period_no: i32, schedule_date: DateTime<Utc>, depreciation_amount: Decimal, accumulated_after: Decimal, posted: bool) -> Self {
         Self {
             id: Uuid::new_v4(),
-            company_id,
             asset_id,
             period_no,
             schedule_date,
@@ -153,9 +151,6 @@ impl AssetDepreciationEntry {
     pub fn apply_patch(&mut self, fields: std::collections::HashMap<String, serde_json::Value>) {
         for (key, value) in fields {
             match key.as_str() {
-                "company_id" => {
-                    if let Ok(v) = serde_json::from_value(value) { self.company_id = v; }
-                }
                 "asset_id" => {
                     if let Ok(v) = serde_json::from_value(value) { self.asset_id = v; }
                 }
@@ -231,15 +226,11 @@ impl backbone_orm::EntityRepoMeta for AssetDepreciationEntry {
     fn column_types() -> std::collections::HashMap<String, String> {
         let mut m = std::collections::HashMap::new();
         m.insert("id".to_string(), "uuid".to_string());
-        m.insert("company_id".to_string(), "uuid".to_string());
         m.insert("asset_id".to_string(), "uuid".to_string());
         m
     }
     fn search_fields() -> &'static [&'static str] {
         &[]
-    }
-    fn company_field() -> Option<&'static str> {
-        Some("company_id")
     }
 }
 
@@ -249,7 +240,6 @@ impl backbone_orm::EntityRepoMeta for AssetDepreciationEntry {
 /// System fields (id, metadata, timestamps) are auto-initialized.
 #[derive(Debug, Clone, Default)]
 pub struct AssetDepreciationEntryBuilder {
-    company_id: Option<Uuid>,
     asset_id: Option<Uuid>,
     period_no: Option<i32>,
     schedule_date: Option<DateTime<Utc>>,
@@ -260,12 +250,6 @@ pub struct AssetDepreciationEntryBuilder {
 }
 
 impl AssetDepreciationEntryBuilder {
-    /// Set the company_id field (required)
-    pub fn company_id(mut self, value: Uuid) -> Self {
-        self.company_id = Some(value);
-        self
-    }
-
     /// Set the asset_id field (required)
     pub fn asset_id(mut self, value: Uuid) -> Self {
         self.asset_id = Some(value);
@@ -312,7 +296,6 @@ impl AssetDepreciationEntryBuilder {
     ///
     /// Returns Err if any required field without a default is missing.
     pub fn build(self) -> Result<AssetDepreciationEntry, String> {
-        let company_id = self.company_id.ok_or_else(|| "company_id is required".to_string())?;
         let asset_id = self.asset_id.ok_or_else(|| "asset_id is required".to_string())?;
         let period_no = self.period_no.ok_or_else(|| "period_no is required".to_string())?;
         let schedule_date = self.schedule_date.ok_or_else(|| "schedule_date is required".to_string())?;
@@ -321,7 +304,6 @@ impl AssetDepreciationEntryBuilder {
 
         Ok(AssetDepreciationEntry {
             id: Uuid::new_v4(),
-            company_id,
             asset_id,
             period_no,
             schedule_date,

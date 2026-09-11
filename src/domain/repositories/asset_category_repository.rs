@@ -44,7 +44,6 @@ pub struct AssetCategoryPaginatedResult {
 /// Filter parameters for list queries
 #[derive(Debug, Clone, Default)]
 pub struct AssetCategoryFilter {
-    pub company_id: Option<Uuid>,
     pub category_name: Option<String>,
     pub depreciation_method: Option<DepreciationMethod>,
     pub fixed_asset_account_id: Option<Uuid>,
@@ -57,7 +56,7 @@ pub struct AssetCategoryFilter {
 impl AssetCategoryFilter {
     /// Check if any filter is set
     pub fn has_filters(&self) -> bool {
-        self.company_id.is_some() || self.category_name.is_some() || self.depreciation_method.is_some() || self.fixed_asset_account_id.is_some() || self.accumulated_depreciation_account_id.is_some() || self.depreciation_expense_account_id.is_some() || self.disposal_gain_loss_account_id.is_some() || self.status.is_some()
+        self.category_name.is_some() || self.depreciation_method.is_some() || self.fixed_asset_account_id.is_some() || self.accumulated_depreciation_account_id.is_some() || self.depreciation_expense_account_id.is_some() || self.disposal_gain_loss_account_id.is_some() || self.status.is_some()
     }
 }
 

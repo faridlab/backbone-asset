@@ -34,9 +34,6 @@ use crate::domain::entity::AuditMetadata;
 #[serde(rename_all = "camelCase")]
 pub struct CreateAssetDepreciationEntryDto {
     #[cfg_attr(feature = "openapi", schema(example = "550e8400-e29b-41d4-a716-446655440000"))]
-    #[serde(alias = "company_id")]
-    pub company_id: Uuid,
-    #[cfg_attr(feature = "openapi", schema(example = "550e8400-e29b-41d4-a716-446655440000"))]
     #[serde(alias = "asset_id")]
     pub asset_id: Uuid,
     #[cfg_attr(feature = "openapi", schema(example = 42))]
@@ -68,9 +65,6 @@ pub struct CreateAssetDepreciationEntryDto {
 #[cfg_attr(feature = "validation", derive(Validate))]
 #[serde(rename_all = "camelCase")]
 pub struct UpdateAssetDepreciationEntryDto {
-    #[cfg_attr(feature = "openapi", schema(example = "550e8400-e29b-41d4-a716-446655440000"))]
-    #[serde(alias = "company_id")]
-    pub company_id: Uuid,
     #[cfg_attr(feature = "openapi", schema(example = "550e8400-e29b-41d4-a716-446655440000"))]
     #[serde(alias = "asset_id")]
     pub asset_id: Uuid,
@@ -104,9 +98,6 @@ pub struct UpdateAssetDepreciationEntryDto {
 #[serde(rename_all = "camelCase")]
 pub struct PatchAssetDepreciationEntryDto {
     #[cfg_attr(feature = "openapi", schema(example = "550e8400-e29b-41d4-a716-446655440000"))]
-    #[serde(skip_serializing_if = "Option::is_none", alias = "company_id")]
-    pub company_id: Option<Uuid>,
-    #[cfg_attr(feature = "openapi", schema(example = "550e8400-e29b-41d4-a716-446655440000"))]
     #[serde(skip_serializing_if = "Option::is_none", alias = "asset_id")]
     pub asset_id: Option<Uuid>,
     #[cfg_attr(feature = "openapi", schema(example = 42))]
@@ -129,7 +120,7 @@ pub struct PatchAssetDepreciationEntryDto {
 impl PatchAssetDepreciationEntryDto {
     /// Check if any field is set
     pub fn has_changes(&self) -> bool {
-        self.company_id.is_some() || self.asset_id.is_some() || self.period_no.is_some() || self.schedule_date.is_some() || self.depreciation_amount.is_some() || self.accumulated_after.is_some() || self.posted.is_some() || self.posted_at.is_some()
+        self.asset_id.is_some() || self.period_no.is_some() || self.schedule_date.is_some() || self.depreciation_amount.is_some() || self.accumulated_after.is_some() || self.posted.is_some() || self.posted_at.is_some()
     }
 }
 
@@ -147,8 +138,6 @@ impl PatchAssetDepreciationEntryDto {
 pub struct AssetDepreciationEntryResponseDto {
     #[cfg_attr(feature = "openapi", schema(example = "550e8400-e29b-41d4-a716-446655440000"))]
     pub id: Uuid,
-    #[cfg_attr(feature = "openapi", schema(example = "550e8400-e29b-41d4-a716-446655440000"))]
-    pub company_id: Uuid,
     #[cfg_attr(feature = "openapi", schema(example = "550e8400-e29b-41d4-a716-446655440000"))]
     pub asset_id: Uuid,
     #[cfg_attr(feature = "openapi", schema(example = 42))]
@@ -217,9 +206,9 @@ impl AssetDepreciationEntryListResponseDto {
 #[serde(rename_all = "camelCase")]
 pub struct AssetDepreciationEntrySummaryDto {
     pub id: Uuid,
-    pub company_id: Uuid,
     pub asset_id: Uuid,
     pub period_no: i32,
+    pub schedule_date: DateTime<Utc>,
     pub created_at: Option<DateTime<Utc>>,
 }
 
@@ -231,7 +220,6 @@ impl From<AssetDepreciationEntry> for AssetDepreciationEntryResponseDto {
     fn from(entity: AssetDepreciationEntry) -> Self {
         Self {
             id: entity.id,
-            company_id: entity.company_id,
             asset_id: entity.asset_id,
             period_no: entity.period_no,
             schedule_date: entity.schedule_date,
@@ -249,9 +237,9 @@ impl From<AssetDepreciationEntry> for AssetDepreciationEntrySummaryDto {
         let created_at = backbone_core::PersistentEntity::created_at(&entity);
         Self {
             id: entity.id,
-            company_id: entity.company_id,
             asset_id: entity.asset_id,
             period_no: entity.period_no,
+            schedule_date: entity.schedule_date,
             created_at,
         }
     }
@@ -261,7 +249,6 @@ impl From<CreateAssetDepreciationEntryDto> for AssetDepreciationEntry {
     fn from(dto: CreateAssetDepreciationEntryDto) -> Self {
         Self {
             id: Uuid::new_v4(),
-            company_id: dto.company_id,
             asset_id: dto.asset_id,
             period_no: dto.period_no,
             schedule_date: dto.schedule_date,
@@ -278,7 +265,6 @@ impl From<&AssetDepreciationEntry> for AssetDepreciationEntryResponseDto {
     fn from(entity: &AssetDepreciationEntry) -> Self {
         Self {
             id: entity.id.clone(),
-            company_id: entity.company_id.clone(),
             asset_id: entity.asset_id.clone(),
             period_no: entity.period_no.clone(),
             schedule_date: entity.schedule_date.clone(),
@@ -299,7 +285,6 @@ impl backbone_core::FromCreateDto<CreateAssetDepreciationEntryDto> for AssetDepr
 
 impl backbone_core::ApplyUpdateDto<UpdateAssetDepreciationEntryDto> for AssetDepreciationEntry {
     fn apply_update(mut self, dto: UpdateAssetDepreciationEntryDto) -> backbone_core::ServiceResult<Self> {
-        self.company_id = dto.company_id;
         self.asset_id = dto.asset_id;
         self.period_no = dto.period_no;
         self.schedule_date = dto.schedule_date;

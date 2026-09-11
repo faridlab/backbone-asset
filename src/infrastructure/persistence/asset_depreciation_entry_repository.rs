@@ -13,7 +13,7 @@ use rust_decimal::Decimal;
 use sqlx::{PgPool, Row};
 use uuid::Uuid;
 
-use backbone_orm::company_scope;
+use backbone_orm::org_scope;
 
 use crate::domain::entity::AssetDepreciationEntry;
 
@@ -47,7 +47,6 @@ impl AssetDepreciationEntryRepository {
 /// offset — both computed by the caller so a mid-life onboarded asset's remaining periods tie out.
 pub struct NewDepreciationEntryRow {
     pub id: Uuid,
-    pub company_id: Uuid,
     pub asset_id: Uuid,
     pub period_no: i32,
     pub schedule_date: chrono::DateTime<chrono::Utc>,
@@ -68,7 +67,8 @@ pub struct DueEntryRow {
 /// 4-layer rule.
 impl AssetDepreciationEntryRepository {
     /// Insert one generated schedule period. Takes the CALLER'S connection so the whole schedule commits
-    /// atomically with the draft→active flip. The caller has already bound the company — don't re-bind.
+    /// atomically with the draft→active flip. The caller has already re-bound the ambient org scope —
+    /// don't re-bind.
     pub async fn insert_entry(
         &self,
         conn: &mut sqlx::PgConnection,
@@ -76,11 +76,11 @@ impl AssetDepreciationEntryRepository {
     ) -> Result<(), sqlx::Error> {
         sqlx::query(
             r#"INSERT INTO asset.asset_depreciation_entries
-                 (id, company_id, asset_id, period_no, schedule_date, depreciation_amount,
+                 (id, asset_id, period_no, schedule_date, depreciation_amount,
                   accumulated_after, posted)
-               VALUES ($1,$2,$3,$4,$5,$6,$7,false)"#,
+               VALUES ($1,$2,$3,$4,$5,$6,false)"#,
         )
-        .bind(e.id).bind(e.company_id).bind(e.asset_id).bind(e.period_no).bind(e.schedule_date)
+        .bind(e.id).bind(e.asset_id).bind(e.period_no).bind(e.schedule_date)
         .bind(e.depreciation_amount).bind(e.accumulated_after)
         .execute(conn)
         .await?;
@@ -89,28 +89,25 @@ impl AssetDepreciationEntryRepository {
 
     /// Every unposted period due on or before `up_to`, in period order.
     ///
-    /// A read outside any transaction: takes the pool and runs `fetch_all_rows_scoped` so the RLS fence
-    /// (ADR-0008) applies. The caller wraps this in `with_company_scope(Some(company_id))` using the
-    /// company read off the asset row — so this is correct for non-request callers (the depreciation
-    /// job) too.
+    /// Takes the CALLER'S connection: the caller re-binds the ambient org scope onto it
+    /// (`relay_ambient_scope`), so on a composed deployment (ADR-0029) the fence sees the caller —
+    /// and with no ambient scope bound (standalone deployments, jobs) the read is simply plain.
     pub async fn list_due(
         &self,
-        pool: &PgPool,
+        conn: &mut sqlx::PgConnection,
         asset_id: Uuid,
         up_to: chrono::DateTime<chrono::Utc>,
     ) -> Result<Vec<DueEntryRow>, sqlx::Error> {
-        let rows = company_scope::fetch_all_rows_scoped(
-            pool,
-            sqlx::query(
-                r#"SELECT id, period_no, schedule_date, depreciation_amount, accumulated_after
-                   FROM asset.asset_depreciation_entries
-                   WHERE asset_id=$1 AND posted=false AND schedule_date <= $2
-                     AND (metadata->>'deleted_at') IS NULL
-                   ORDER BY period_no ASC"#,
-            )
-            .bind(asset_id)
-            .bind(up_to),
+        let rows = sqlx::query(
+            r#"SELECT id, period_no, schedule_date, depreciation_amount, accumulated_after
+               FROM asset.asset_depreciation_entries
+               WHERE asset_id=$1 AND posted=false AND schedule_date <= $2
+                 AND (metadata->>'deleted_at') IS NULL
+               ORDER BY period_no ASC"#,
         )
+        .bind(asset_id)
+        .bind(up_to)
+        .fetch_all(&mut *conn)
         .await?;
         Ok(rows
             .iter()
@@ -124,21 +121,20 @@ impl AssetDepreciationEntryRepository {
             .collect())
     }
 
-    /// The assets (across ALL tenants) with ≥1 unposted period due on or before `up_to`. For the
-    /// scheduled depreciation job, which has no caller principal and so cannot set `app.company_id` for
-    /// the enumeration. Calls the `asset.due_depreciation_assets` SECURITY DEFINER function (runs as the
-    /// table owner → bypasses RLS) and returns `(asset_id, company_id)` pairs; `run_depreciation` then
-    /// re-scopes per asset for the writes.
+    /// The assets with ≥1 unposted period due on or before `up_to`. For the scheduled depreciation
+    /// job, which has no caller principal. Calls the `asset.due_depreciation_assets` SECURITY DEFINER
+    /// function (runs as the table owner → bypasses row security) and returns asset ids;
+    /// `run_depreciation` then runs the idempotent per-asset writes.
     pub async fn list_due_assets(
         &self,
         pool: &PgPool,
         up_to: chrono::DateTime<chrono::Utc>,
-    ) -> Result<Vec<(Uuid, Uuid)>, sqlx::Error> {
-        let rows = sqlx::query("SELECT asset_id, company_id FROM asset.due_depreciation_assets($1)")
+    ) -> Result<Vec<Uuid>, sqlx::Error> {
+        let rows = sqlx::query("SELECT asset_id FROM asset.due_depreciation_assets($1)")
             .bind(up_to)
             .fetch_all(pool)
             .await?;
-        Ok(rows.iter().map(|r| (r.get("asset_id"), r.get("company_id"))).collect())
+        Ok(rows.iter().map(|r| r.get("asset_id")).collect())
     }
 
     /// Claim a period exactly once (CAS on `posted=false`) — the idempotence gate that makes a retry

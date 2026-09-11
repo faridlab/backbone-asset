@@ -11,9 +11,8 @@ use common::*;
 use rust_decimal::Decimal;
 use uuid::Uuid;
 
-async fn category(svc: &AssetWriteService, company: Uuid, a: &AssetAccounts, life: i32) -> Uuid {
+async fn category(svc: &AssetWriteService, a: &AssetAccounts, life: i32) -> Uuid {
     svc.create_category(NewAssetCategory {
-        company_id: company,
         category_name: "Machinery".into(),
         useful_life_months: life,
         fixed_asset_account_id: a.fixed_asset,
@@ -25,9 +24,8 @@ async fn category(svc: &AssetWriteService, company: Uuid, a: &AssetAccounts, lif
     .unwrap()
 }
 
-async fn asset(svc: &AssetWriteService, company: Uuid, cat: Uuid, gross: &str, salvage: &str, life: i32) -> Uuid {
+async fn asset(svc: &AssetWriteService, cat: Uuid, gross: &str, salvage: &str, life: i32) -> Uuid {
     svc.create_asset(NewAsset {
-        company_id: company,
         asset_category_id: cat,
         asset_name: "M1".into(),
         asset_code: format!("A-{}", &Uuid::new_v4().to_string()[..8]),
@@ -62,11 +60,10 @@ async fn agc1_divisible_schedule() {
     let svc = AssetWriteService::new(pool.clone());
     let gl = CountingGl::new();
     let sink = LoggingSink;
-    let company = Uuid::new_v4();
-    let acc = asset_accounts(&pool, company).await;
-    let cat = category(&svc, company, &acc, 12).await;
-    let a = asset(&svc, company, cat, "12000", "0", 0).await;
-    svc.activate_asset(a, company, acc.funding, today(), &gl, &sink).await.unwrap();
+    let acc = asset_accounts(&pool).await;
+    let cat = category(&svc, &acc, 12).await;
+    let a = asset(&svc, cat, "12000", "0", 0).await;
+    svc.activate_asset(a, acc.funding, today(), &gl, &sink).await.unwrap();
 
     let s = schedule(&pool, a).await;
     assert_eq!(s.len(), 12);
@@ -83,12 +80,11 @@ async fn agc2_non_divisible_last_absorbs_residue() {
     let svc = AssetWriteService::new(pool.clone());
     let gl = CountingGl::new();
     let sink = LoggingSink;
-    let company = Uuid::new_v4();
-    let acc = asset_accounts(&pool, company).await;
-    let cat = category(&svc, company, &acc, 3).await;
+    let acc = asset_accounts(&pool).await;
+    let cat = category(&svc, &acc, 3).await;
     // 10,000 over 3 → 3333.33, 3333.33, 3333.34 (Σ = 10,000).
-    let a = asset(&svc, company, cat, "10000", "0", 0).await;
-    svc.activate_asset(a, company, acc.funding, today(), &gl, &sink).await.unwrap();
+    let a = asset(&svc, cat, "10000", "0", 0).await;
+    svc.activate_asset(a, acc.funding, today(), &gl, &sink).await.unwrap();
 
     let s = schedule(&pool, a).await;
     let amts: Vec<Decimal> = s.iter().map(|(_, amt, _)| *amt).collect();
@@ -103,12 +99,11 @@ async fn agc3_salvage_reduces_depreciable() {
     let svc = AssetWriteService::new(pool.clone());
     let gl = CountingGl::new();
     let sink = LoggingSink;
-    let company = Uuid::new_v4();
-    let acc = asset_accounts(&pool, company).await;
-    let cat = category(&svc, company, &acc, 4).await;
+    let acc = asset_accounts(&pool).await;
+    let cat = category(&svc, &acc, 4).await;
     // gross 10,000, salvage 2,000 → depreciable 8,000 / 4 = 2,000 each.
-    let a = asset(&svc, company, cat, "10000", "2000", 0).await;
-    svc.activate_asset(a, company, acc.funding, today(), &gl, &sink).await.unwrap();
+    let a = asset(&svc, cat, "10000", "2000", 0).await;
+    svc.activate_asset(a, acc.funding, today(), &gl, &sink).await.unwrap();
 
     let s = schedule(&pool, a).await;
     assert_eq!(s.iter().map(|(_, amt, _)| *amt).sum::<Decimal>(), dec("8000.00"));
@@ -122,13 +117,12 @@ async fn agc4_validation_and_life_inheritance() {
     let svc = AssetWriteService::new(pool.clone());
     let sink = LoggingSink;
     let gl = CountingGl::new();
-    let company = Uuid::new_v4();
-    let acc = asset_accounts(&pool, company).await;
-    let cat = category(&svc, company, &acc, 6).await;
+    let acc = asset_accounts(&pool).await;
+    let cat = category(&svc, &acc, 6).await;
 
     // salvage >= gross → rejected.
     let bad = svc.create_asset(NewAsset {
-        company_id: company, asset_category_id: cat, asset_name: "x".into(), asset_code: "X".into(),
+        asset_category_id: cat, asset_name: "x".into(), asset_code: "X".into(),
         item_id: None, branch_id: None, gross_purchase_amount: dec("1000"), salvage_value: dec("1000"),
         opening_accumulated_depreciation: dec("0"),
         useful_life_months: 0, purchase_date: now(), available_for_use_date: None,
@@ -136,8 +130,8 @@ async fn agc4_validation_and_life_inheritance() {
     assert!(matches!(bad, Err(AssetError::Invalid(_))));
 
     // life 0 → inherit the category's 6 months.
-    let a = asset(&svc, company, cat, "6000", "0", 0).await;
-    svc.activate_asset(a, company, acc.funding, today(), &gl, &sink).await.unwrap();
+    let a = asset(&svc, cat, "6000", "0", 0).await;
+    svc.activate_asset(a, acc.funding, today(), &gl, &sink).await.unwrap();
     assert_eq!(schedule(&pool, a).await.len(), 6, "useful life inherited from the category");
 }
 
@@ -151,12 +145,11 @@ async fn agc5_onboard_existing_part_depreciated_asset() {
     let svc = AssetWriteService::new(pool.clone());
     let gl = CountingGl::new();
     let sink = LoggingSink;
-    let company = Uuid::new_v4();
-    let acc = asset_accounts(&pool, company).await;
-    let cat = category(&svc, company, &acc, 120).await;
+    let acc = asset_accounts(&pool).await;
+    let cat = category(&svc, &acc, 120).await;
 
     let a = svc.create_asset(NewAsset {
-        company_id: company, asset_category_id: cat, asset_name: "M".into(),
+        asset_category_id: cat, asset_name: "M".into(),
         asset_code: format!("A-{}", &Uuid::new_v4().to_string()[..8]),
         item_id: None, branch_id: None, gross_purchase_amount: dec("120000"), salvage_value: dec("0"),
         opening_accumulated_depreciation: dec("30000"), // already 30k depreciated
@@ -170,7 +163,7 @@ async fn agc5_onboard_existing_part_depreciated_asset() {
     assert_eq!(accd, dec("30000.00"));
     assert_eq!(nbv, dec("90000.00"));
 
-    svc.activate_asset(a, company, acc.funding, today(), &gl, &sink).await.unwrap();
+    svc.activate_asset(a, acc.funding, today(), &gl, &sink).await.unwrap();
     // NO capitalization post — the asset is already on the opening trial balance.
     assert_eq!(gl.count("acquire"), 0, "an onboarded asset is NOT re-capitalized");
 

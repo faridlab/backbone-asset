@@ -33,16 +33,18 @@ pub fn today() -> chrono::NaiveDate {
     chrono::Utc::now().date_naive()
 }
 
-pub async fn account(pool: &PgPool, company: Uuid, code: &str, atype: &str, subtype: &str, normal: &str) -> Uuid {
+pub async fn account(pool: &PgPool, code: &str, atype: &str, subtype: &str, normal: &str) -> Uuid {
     let id = Uuid::new_v4();
+    // Accounting's accounts table carries no tenant column (ADR-0029): the chart is a
+    // whole-deployment chart; isolation is the composing service's decorator's business.
     sqlx::query(
         r#"INSERT INTO accounting.accounts
-             (id, company_id, account_number, account_code, name, account_type, account_subtype,
+             (id, account_number, account_code, name, account_type, account_subtype,
               normal_balance, is_header, is_detail, status)
-           VALUES ($1,$2,$3,$4,$5,$6::account_type,$7::account_subtype,$8::normal_balance,
+           VALUES ($1,$2,$3,$4,$5::account_type,$6::account_subtype,$7::normal_balance,
                    false,true,'active'::account_status)"#,
     )
-    .bind(id).bind(company).bind(code).bind(code).bind(code).bind(atype).bind(subtype).bind(normal)
+    .bind(id).bind(code).bind(code).bind(code).bind(atype).bind(subtype).bind(normal)
     .execute(pool).await.expect("seed account");
     id
 }
@@ -67,16 +69,16 @@ pub struct AssetAccounts {
     pub funding: Uuid,
     pub proceeds: Uuid,
 }
-pub async fn asset_accounts(pool: &PgPool, company: Uuid) -> AssetAccounts {
+pub async fn asset_accounts(pool: &PgPool) -> AssetAccounts {
     AssetAccounts {
-        fixed_asset: account(pool, company, "1500-FA", "asset", "fixed_asset", "debit").await,
-        accum_dep: account(pool, company, "1590-AD", "asset", "accumulated_depreciation", "credit").await,
-        dep_expense: account(pool, company, "6000-DE", "expense", "operating_expense", "debit").await,
-        gain_loss: account(pool, company, "7000-GL", "other_income", "operating_revenue", "credit").await,
+        fixed_asset: account(pool, "1500-FA", "asset", "fixed_asset", "debit").await,
+        accum_dep: account(pool, "1590-AD", "asset", "accumulated_depreciation", "credit").await,
+        dep_expense: account(pool, "6000-DE", "expense", "operating_expense", "debit").await,
+        gain_loss: account(pool, "7000-GL", "other_income", "operating_revenue", "credit").await,
         // Cash-funded acquisition (a bank account needs no party; an AP funding would require the
         // supplier party, which the MVP activate() does not carry — see the completeness parking lot).
-        funding: account(pool, company, "1000-BANK", "asset", "bank", "debit").await,
-        proceeds: account(pool, company, "1100-CASH", "asset", "cash", "debit").await,
+        funding: account(pool, "1000-BANK", "asset", "bank", "debit").await,
+        proceeds: account(pool, "1100-CASH", "asset", "cash", "debit").await,
     }
 }
 

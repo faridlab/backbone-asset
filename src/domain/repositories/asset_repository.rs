@@ -44,7 +44,6 @@ pub struct AssetPaginatedResult {
 /// Filter parameters for list queries
 #[derive(Debug, Clone, Default)]
 pub struct AssetFilter {
-    pub company_id: Option<Uuid>,
     pub asset_category_id: Option<Uuid>,
     pub asset_name: Option<String>,
     pub asset_code: Option<String>,
@@ -56,7 +55,7 @@ pub struct AssetFilter {
 impl AssetFilter {
     /// Check if any filter is set
     pub fn has_filters(&self) -> bool {
-        self.company_id.is_some() || self.asset_category_id.is_some() || self.asset_name.is_some() || self.asset_code.is_some() || self.item_id.is_some() || self.branch_id.is_some() || self.status.is_some()
+        self.asset_category_id.is_some() || self.asset_name.is_some() || self.asset_code.is_some() || self.item_id.is_some() || self.branch_id.is_some() || self.status.is_some()
     }
 }
 

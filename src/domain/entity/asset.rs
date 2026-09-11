@@ -51,7 +51,6 @@ impl std::ops::Deref for AssetId {
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 pub struct Asset {
     pub id: Uuid,
-    pub company_id: Uuid,
     pub asset_category_id: Uuid,
     pub asset_name: String,
     pub asset_code: String,
@@ -78,10 +77,9 @@ impl Asset {
     }
 
     /// Create a new Asset with required fields
-    pub fn new(company_id: Uuid, asset_category_id: Uuid, asset_name: String, asset_code: String, gross_purchase_amount: Decimal, salvage_value: Decimal, useful_life_months: i32, opening_accumulated_depreciation: Decimal, purchase_date: DateTime<Utc>, accumulated_depreciation: Decimal, net_book_value: Decimal, status: AssetStatus) -> Self {
+    pub fn new(asset_category_id: Uuid, asset_name: String, asset_code: String, gross_purchase_amount: Decimal, salvage_value: Decimal, useful_life_months: i32, opening_accumulated_depreciation: Decimal, purchase_date: DateTime<Utc>, accumulated_depreciation: Decimal, net_book_value: Decimal, status: AssetStatus) -> Self {
         Self {
             id: Uuid::new_v4(),
-            company_id,
             asset_category_id,
             asset_name,
             asset_code,
@@ -186,9 +184,6 @@ impl Asset {
     pub fn apply_patch(&mut self, fields: std::collections::HashMap<String, serde_json::Value>) {
         for (key, value) in fields {
             match key.as_str() {
-                "company_id" => {
-                    if let Ok(v) = serde_json::from_value(value) { self.company_id = v; }
-                }
                 "asset_category_id" => {
                     if let Ok(v) = serde_json::from_value(value) { self.asset_category_id = v; }
                 }
@@ -285,7 +280,6 @@ impl backbone_orm::EntityRepoMeta for Asset {
     fn column_types() -> std::collections::HashMap<String, String> {
         let mut m = std::collections::HashMap::new();
         m.insert("id".to_string(), "uuid".to_string());
-        m.insert("company_id".to_string(), "uuid".to_string());
         m.insert("asset_category_id".to_string(), "uuid".to_string());
         m.insert("item_id".to_string(), "uuid".to_string());
         m.insert("branch_id".to_string(), "uuid".to_string());
@@ -295,9 +289,6 @@ impl backbone_orm::EntityRepoMeta for Asset {
     fn search_fields() -> &'static [&'static str] {
         &["asset_name", "asset_code"]
     }
-    fn company_field() -> Option<&'static str> {
-        Some("company_id")
-    }
 }
 
 /// Builder for Asset entity
@@ -306,7 +297,6 @@ impl backbone_orm::EntityRepoMeta for Asset {
 /// System fields (id, metadata, timestamps) are auto-initialized.
 #[derive(Debug, Clone, Default)]
 pub struct AssetBuilder {
-    company_id: Option<Uuid>,
     asset_category_id: Option<Uuid>,
     asset_name: Option<String>,
     asset_code: Option<String>,
@@ -324,12 +314,6 @@ pub struct AssetBuilder {
 }
 
 impl AssetBuilder {
-    /// Set the company_id field (required)
-    pub fn company_id(mut self, value: Uuid) -> Self {
-        self.company_id = Some(value);
-        self
-    }
-
     /// Set the asset_category_id field (required)
     pub fn asset_category_id(mut self, value: Uuid) -> Self {
         self.asset_category_id = Some(value);
@@ -418,7 +402,6 @@ impl AssetBuilder {
     ///
     /// Returns Err if any required field without a default is missing.
     pub fn build(self) -> Result<Asset, String> {
-        let company_id = self.company_id.ok_or_else(|| "company_id is required".to_string())?;
         let asset_category_id = self.asset_category_id.ok_or_else(|| "asset_category_id is required".to_string())?;
         let asset_name = self.asset_name.ok_or_else(|| "asset_name is required".to_string())?;
         let asset_code = self.asset_code.ok_or_else(|| "asset_code is required".to_string())?;
@@ -428,7 +411,6 @@ impl AssetBuilder {
 
         Ok(Asset {
             id: Uuid::new_v4(),
-            company_id,
             asset_category_id,
             asset_name,
             asset_code,

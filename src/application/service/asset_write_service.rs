@@ -16,8 +16,15 @@
 //! - [`super::asset_activate`] — capitalize + generate schedule + flip draft→active (`activate_asset`).
 //! - [`super::asset_depreciate`] — post every due schedule period (`run_depreciation`).
 //! - [`super::asset_dispose`] — remove from the books and recognise gain/loss (`dispose_asset`).
+//!
+//! **Tenancy (ADR-0029).** The module is tenant-agnostic: its tables carry no scoping column and
+//! the module keys no statement on a tenant. A composing service's tenancy decorator installs the
+//! org-unit axis; this service only re-binds the caller's ambient org scope onto the transactions
+//! it opens itself (the scope is task-local and does not survive a fresh pool transaction). Wire
+//! shapes consumed by still-company-fenced callers (the GL-post envelope, the domain events) carry
+//! a legacy company id echoed from that ambient scope — nil when none is bound.
 
-use backbone_orm::company_scope;
+use backbone_orm::org_scope;
 use rust_decimal::{Decimal, RoundingStrategy};
 use sqlx::PgPool;
 use uuid::Uuid;
@@ -31,6 +38,31 @@ use super::asset_gl::{AccountingPostEnvelope, GlPostSink};
 
 pub(super) fn money(v: Decimal) -> Decimal {
     v.round_dp_with_strategy(2, RoundingStrategy::MidpointAwayFromZero)
+}
+
+/// The legacy tenancy twin echo (ADR-0029): outbound wire shapes that still carry a `company_id`
+/// (the GL-post envelope, the domain events) get the ambient org scope's legacy company id when
+/// the composing service bound one; nil otherwise. Nothing in this module keys a statement on it,
+/// and an undecorated deployment is unfenced by design.
+pub(super) fn legacy_company_echo() -> Uuid {
+    org_scope::current_org_scope()
+        .and_then(|s| s.legacy_company_id())
+        .unwrap_or(Uuid::nil())
+}
+
+/// Re-bind the caller's ambient org scope onto a transaction this service opened itself — the
+/// scope is task-local and a fresh pool transaction carries none of it. With no ambient scope
+/// (standalone deployment, jobs) the transaction stays plain: the module is tenant-agnostic and
+/// the composed decorator owns isolation.
+pub(super) async fn relay_ambient_scope(
+    tx: &mut sqlx::PgConnection,
+) -> Result<(), AssetError> {
+    if let Some(scope) = org_scope::current_org_scope() {
+        org_scope::bind_org_scope_on(tx, &scope)
+            .await
+            .map_err(AssetError::Db)?;
+    }
+    Ok(())
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -52,7 +84,6 @@ pub enum AssetError {
 }
 
 pub struct NewAssetCategory {
-    pub company_id: Uuid,
     pub category_name: String,
     pub useful_life_months: i32,
     pub fixed_asset_account_id: Uuid,
@@ -62,7 +93,6 @@ pub struct NewAssetCategory {
 }
 
 pub struct NewAsset {
-    pub company_id: Uuid,
     pub asset_category_id: Uuid,
     pub asset_name: String,
     pub asset_code: String,
@@ -111,7 +141,6 @@ pub(super) struct Cat {
 }
 
 pub(super) struct AssetRow {
-    pub(super) company_id: Uuid,
     pub(super) category_id: Uuid,
     pub(super) asset_code: String,
     pub(super) gross: Decimal,
@@ -137,11 +166,8 @@ impl AssetWriteService {
             return Err(AssetError::Invalid("useful_life_months must be positive".into()));
         }
         let id = Uuid::new_v4();
-        // RLS scope (ADR-0008): company is on the DTO — scope the insert on it so it passes the
-        // WITH CHECK fence. The explicit `company_id` bind stays as defense-in-depth.
         let row = NewAssetCategoryRow {
             id,
-            company_id: c.company_id,
             category_name: &c.category_name,
             useful_life_months: c.useful_life_months,
             fixed_asset_account_id: c.fixed_asset_account_id,
@@ -149,11 +175,7 @@ impl AssetWriteService {
             depreciation_expense_account_id: c.depreciation_expense_account_id,
             disposal_gain_loss_account_id: c.disposal_gain_loss_account_id,
         };
-        company_scope::with_company_scope(
-            Some(c.company_id),
-            self.categories.insert_category(&self.pool, &row),
-        )
-        .await?;
+        self.categories.insert_category(&self.pool, &row).await?;
         Ok(id)
     }
 
@@ -165,13 +187,11 @@ impl AssetWriteService {
         if a.salvage_value < Decimal::ZERO || a.salvage_value >= a.gross_purchase_amount {
             return Err(AssetError::Invalid("salvage_value must be in [0, gross)".into()));
         }
-        // RLS scope (ADR-0008): company is on the DTO — scope the category lookup on it.
-        let cat_life: i32 = company_scope::with_company_scope(
-            Some(a.company_id),
-            self.categories.find_useful_life(&self.pool, a.asset_category_id, a.company_id),
-        )
-        .await?
-        .ok_or(AssetError::NotFound("asset category"))?;
+        let cat_life: i32 = self
+            .categories
+            .find_useful_life(&self.pool, a.asset_category_id)
+            .await?
+            .ok_or(AssetError::NotFound("asset category"))?;
         let life = if a.useful_life_months > 0 { a.useful_life_months } else { cat_life };
         let depreciable = a.gross_purchase_amount - a.salvage_value;
         // An onboarded existing asset can already be partly (not fully) depreciated.
@@ -188,7 +208,6 @@ impl AssetWriteService {
         let id = Uuid::new_v4();
         let row = NewAssetRow {
             id,
-            company_id: a.company_id,
             asset_category_id: a.asset_category_id,
             asset_name: &a.asset_name,
             asset_code: &a.asset_code,
@@ -201,11 +220,7 @@ impl AssetWriteService {
             purchase_date: a.purchase_date,
             available_for_use_date: a.available_for_use_date,
         };
-        let r = company_scope::with_company_scope(
-            Some(a.company_id),
-            self.assets.insert_asset(&self.pool, &row),
-        )
-        .await;
+        let r = self.assets.insert_asset(&self.pool, &row).await;
         if let Err(e) = r {
             return Err(if is_dup(&e) { AssetError::DuplicateNumber(a.asset_code) } else { e.into() });
         }
@@ -222,15 +237,12 @@ impl AssetWriteService {
         Ok(())
     }
 
-    pub(super) async fn load_category(&self, company_id: Uuid, id: Uuid) -> Result<Cat, AssetError> {
-        // RLS scope (ADR-0008): the company is a parameter (read off the asset row by the caller) —
-        // scope the lookup on it, so this is correct for non-request callers (jobs) too.
-        let r = company_scope::with_company_scope(
-            Some(company_id),
-            self.categories.find_accounts(&self.pool, id, company_id),
-        )
-        .await?
-        .ok_or(AssetError::NotFound("asset category"))?;
+    pub(super) async fn load_category(&self, id: Uuid) -> Result<Cat, AssetError> {
+        let r = self
+            .categories
+            .find_accounts(&self.pool, id)
+            .await?
+            .ok_or(AssetError::NotFound("asset category"))?;
         Ok(Cat {
             method: r.method,
             useful_life_months: r.useful_life_months,
@@ -241,20 +253,16 @@ impl AssetWriteService {
         })
     }
 
-    pub(super) async fn load_asset(&self, company_id: Uuid, id: Uuid) -> Result<AssetRow, AssetError> {
-        // RLS scope (ADR-0008): the caller supplies the VERIFIED company — the HTTP path derives it from
-        // the authenticated `CompanyContext` (never the request body); event/job callers pass it
-        // explicitly. Scope the snapshot read on it so a mismatched tenant's asset is simply NotFound.
-        // (load_asset uses the pool directly — a fresh connection — so it must scope itself; it does NOT
-        // ride a request-dedicated connection.)
-        let r = company_scope::with_company_scope(
-            Some(company_id),
-            self.assets.find_snapshot(&self.pool, id),
-        )
-        .await?
-        .ok_or(AssetError::NotFound("asset"))?;
+    pub(super) async fn load_asset(&self, id: Uuid) -> Result<AssetRow, AssetError> {
+        // Id-only lookup (ADR-0029): the module is tenant-agnostic; when a composing service's
+        // decorator has fenced these tables, an out-of-scope read resolves to zero rows here and
+        // surfaces as NotFound.
+        let r = self
+            .assets
+            .find_snapshot(&self.pool, id)
+            .await?
+            .ok_or(AssetError::NotFound("asset"))?;
         Ok(AssetRow {
-            company_id: r.company_id,
             category_id: r.asset_category_id,
             asset_code: r.asset_code,
             gross: r.gross_purchase_amount,

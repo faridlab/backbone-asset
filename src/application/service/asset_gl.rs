@@ -43,6 +43,8 @@ impl GlPostLine {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct AccountingPostEnvelope {
     pub idempotency_key: String,
+    /// Legacy tenant twin (ADR-0029) for unstripped consumers — the ambient org scope's legacy
+    /// company id, nil when none is bound. The module keys no statement on it.
     pub company_id: Uuid,
     pub branch_id: Option<Uuid>,
     /// Posting source discriminator — assets emits "asset".

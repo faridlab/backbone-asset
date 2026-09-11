@@ -20,10 +20,6 @@ models:
         type: uuid
         attributes: ["@id", "@default(uuid)"]
         description: "Unique category id"
-      company_id:
-        type: uuid
-        attributes: ["@required", "@exclude_from_foreign_key_check"]
-        description: "Books owner # logical FK to organization.Company.id"
       category_name:
         type: string
         attributes: ["@required", "@max(140)"]
@@ -63,8 +59,9 @@ models:
         attributes: ["@audit_metadata"]
         description: "Audit metadata"
     indexes:
-      - type: index
-        fields: [company_id, status]
+      # No tenancy indexes (ADR-0029): the module is tenant-agnostic. The per-unit
+      # status listing index is installed by the composing service's tenancy
+      # decorator (org_unit_id-leading), not declared here.
 
   - name: Asset
     collection: assets
@@ -74,10 +71,6 @@ models:
         type: uuid
         attributes: ["@id", "@default(uuid)"]
         description: "Unique asset id"
-      company_id:
-        type: uuid
-        attributes: ["@required", "@exclude_from_foreign_key_check"]
-        description: "Books owner # logical FK to organization.Company.id"
       asset_category_id:
         type: uuid
         attributes: ["@required", "@foreign_key(AssetCategory.id)"]
@@ -89,7 +82,7 @@ models:
       asset_code:
         type: string
         attributes: ["@required", "@max(40)"]
-        description: "Asset number (unique per company)"
+        description: "Asset number (unique per books; the composing service's tenancy decorator owns the per-unit code uniqueness)"
       item_id:
         type: uuid?
         attributes: ["@exclude_from_foreign_key_check"]
@@ -141,11 +134,9 @@ models:
         attributes: ["@audit_metadata"]
         description: "Audit metadata"
     indexes:
-      - type: unique
-        fields: [company_id, asset_code]
-        where: "deleted_at IS NULL"
-      - type: index
-        fields: [company_id, status]
+      # No tenancy indexes (ADR-0029): the module is tenant-agnostic. The per-unit
+      # asset-code uniqueness and the status listing index are installed by the
+      # composing service's tenancy decorator (org_unit_id-leading), not declared here.
       - type: index
         fields: [asset_category_id]
 
@@ -157,10 +148,6 @@ models:
         type: uuid
         attributes: ["@id", "@default(uuid)"]
         description: "Unique schedule row id"
-      company_id:
-        type: uuid
-        attributes: ["@required", "@exclude_from_foreign_key_check"]
-        description: "Books owner # logical FK to organization.Company.id"
       asset_id:
         type: uuid
         attributes: ["@required", "@foreign_key(Asset.id)"]
@@ -196,8 +183,9 @@ models:
       - type: unique
         fields: [asset_id, period_no]
         where: "deleted_at IS NULL"
-      - type: index
-        fields: [company_id, asset_id, posted]
+      # No tenancy indexes (ADR-0029): the module is tenant-agnostic. The per-unit
+      # due/posted listing index is installed by the composing service's tenancy
+      # decorator (org_unit_id-leading), not declared here.
 
 enums:
   - name: DepreciationMethod

@@ -35,9 +35,6 @@ use crate::domain::entity::AssetStatus;
 #[serde(rename_all = "camelCase")]
 pub struct CreateAssetDto {
     #[cfg_attr(feature = "openapi", schema(example = "550e8400-e29b-41d4-a716-446655440000"))]
-    #[serde(alias = "company_id")]
-    pub company_id: Uuid,
-    #[cfg_attr(feature = "openapi", schema(example = "550e8400-e29b-41d4-a716-446655440000"))]
     #[serde(alias = "asset_category_id")]
     pub asset_category_id: Uuid,
     #[cfg_attr(feature = "validation", validate(length(max = 140)))]
@@ -86,9 +83,6 @@ pub struct CreateAssetDto {
 #[cfg_attr(feature = "validation", derive(Validate))]
 #[serde(rename_all = "camelCase")]
 pub struct UpdateAssetDto {
-    #[cfg_attr(feature = "openapi", schema(example = "550e8400-e29b-41d4-a716-446655440000"))]
-    #[serde(alias = "company_id")]
-    pub company_id: Uuid,
     #[cfg_attr(feature = "openapi", schema(example = "550e8400-e29b-41d4-a716-446655440000"))]
     #[serde(alias = "asset_category_id")]
     pub asset_category_id: Uuid,
@@ -139,9 +133,6 @@ pub struct UpdateAssetDto {
 #[serde(rename_all = "camelCase")]
 pub struct PatchAssetDto {
     #[cfg_attr(feature = "openapi", schema(example = "550e8400-e29b-41d4-a716-446655440000"))]
-    #[serde(skip_serializing_if = "Option::is_none", alias = "company_id")]
-    pub company_id: Option<Uuid>,
-    #[cfg_attr(feature = "openapi", schema(example = "550e8400-e29b-41d4-a716-446655440000"))]
     #[serde(skip_serializing_if = "Option::is_none", alias = "asset_category_id")]
     pub asset_category_id: Option<Uuid>,
     #[cfg_attr(feature = "validation", validate(length(max = 140)))]
@@ -181,7 +172,7 @@ pub struct PatchAssetDto {
 impl PatchAssetDto {
     /// Check if any field is set
     pub fn has_changes(&self) -> bool {
-        self.company_id.is_some() || self.asset_category_id.is_some() || self.asset_name.is_some() || self.asset_code.is_some() || self.item_id.is_some() || self.branch_id.is_some() || self.gross_purchase_amount.is_some() || self.salvage_value.is_some() || self.useful_life_months.is_some() || self.opening_accumulated_depreciation.is_some() || self.purchase_date.is_some() || self.available_for_use_date.is_some() || self.accumulated_depreciation.is_some() || self.net_book_value.is_some() || self.status.is_some()
+        self.asset_category_id.is_some() || self.asset_name.is_some() || self.asset_code.is_some() || self.item_id.is_some() || self.branch_id.is_some() || self.gross_purchase_amount.is_some() || self.salvage_value.is_some() || self.useful_life_months.is_some() || self.opening_accumulated_depreciation.is_some() || self.purchase_date.is_some() || self.available_for_use_date.is_some() || self.accumulated_depreciation.is_some() || self.net_book_value.is_some() || self.status.is_some()
     }
 }
 
@@ -199,8 +190,6 @@ impl PatchAssetDto {
 pub struct AssetResponseDto {
     #[cfg_attr(feature = "openapi", schema(example = "550e8400-e29b-41d4-a716-446655440000"))]
     pub id: Uuid,
-    #[cfg_attr(feature = "openapi", schema(example = "550e8400-e29b-41d4-a716-446655440000"))]
-    pub company_id: Uuid,
     #[cfg_attr(feature = "openapi", schema(example = "550e8400-e29b-41d4-a716-446655440000"))]
     pub asset_category_id: Uuid,
     #[cfg_attr(feature = "openapi", schema(example = "example"))]
@@ -277,9 +266,9 @@ impl AssetListResponseDto {
 #[serde(rename_all = "camelCase")]
 pub struct AssetSummaryDto {
     pub id: Uuid,
-    pub company_id: Uuid,
     pub asset_category_id: Uuid,
     pub asset_name: String,
+    pub asset_code: String,
     pub created_at: Option<DateTime<Utc>>,
 }
 
@@ -291,7 +280,6 @@ impl From<Asset> for AssetResponseDto {
     fn from(entity: Asset) -> Self {
         Self {
             id: entity.id,
-            company_id: entity.company_id,
             asset_category_id: entity.asset_category_id,
             asset_name: entity.asset_name,
             asset_code: entity.asset_code,
@@ -316,9 +304,9 @@ impl From<Asset> for AssetSummaryDto {
         let created_at = backbone_core::PersistentEntity::created_at(&entity);
         Self {
             id: entity.id,
-            company_id: entity.company_id,
             asset_category_id: entity.asset_category_id,
             asset_name: entity.asset_name,
+            asset_code: entity.asset_code,
             created_at,
         }
     }
@@ -328,7 +316,6 @@ impl From<CreateAssetDto> for Asset {
     fn from(dto: CreateAssetDto) -> Self {
         Self {
             id: Uuid::new_v4(),
-            company_id: dto.company_id,
             asset_category_id: dto.asset_category_id,
             asset_name: dto.asset_name,
             asset_code: dto.asset_code,
@@ -352,7 +339,6 @@ impl From<&Asset> for AssetResponseDto {
     fn from(entity: &Asset) -> Self {
         Self {
             id: entity.id.clone(),
-            company_id: entity.company_id.clone(),
             asset_category_id: entity.asset_category_id.clone(),
             asset_name: entity.asset_name.clone(),
             asset_code: entity.asset_code.clone(),
@@ -380,7 +366,6 @@ impl backbone_core::FromCreateDto<CreateAssetDto> for Asset {
 
 impl backbone_core::ApplyUpdateDto<UpdateAssetDto> for Asset {
     fn apply_update(mut self, dto: UpdateAssetDto) -> backbone_core::ServiceResult<Self> {
-        self.company_id = dto.company_id;
         self.asset_category_id = dto.asset_category_id;
         self.asset_name = dto.asset_name;
         self.asset_code = dto.asset_code;

@@ -14,7 +14,7 @@ use rust_decimal::Decimal;
 use sqlx::{PgPool, Row};
 use uuid::Uuid;
 
-use backbone_orm::company_scope;
+use backbone_orm::org_scope;
 
 use crate::domain::entity::Asset;
 
@@ -48,7 +48,6 @@ impl AssetRepository {
 /// part-depreciated asset starts on the right book values.
 pub struct NewAssetRow<'a> {
     pub id: Uuid,
-    pub company_id: Uuid,
     pub asset_category_id: Uuid,
     pub asset_name: &'a str,
     pub asset_code: &'a str,
@@ -64,7 +63,6 @@ pub struct NewAssetRow<'a> {
 
 /// The asset's full lifecycle snapshot, as every verb reads it before deciding.
 pub struct AssetSnapshotRow {
-    pub company_id: Uuid,
     pub asset_category_id: Uuid,
     pub asset_code: String,
     pub gross_purchase_amount: Decimal,
@@ -79,7 +77,6 @@ pub struct AssetSnapshotRow {
 
 /// The locked disposal projection — read UNDER the row lock, inside the disposal transaction.
 pub struct DisposalLockRow {
-    pub company_id: Uuid,
     pub asset_category_id: Uuid,
     pub asset_code: String,
     pub gross_purchase_amount: Decimal,
@@ -91,23 +88,24 @@ pub struct DisposalLockRow {
 impl AssetRepository {
     /// Register an asset (draft).
     ///
-    /// A write outside any transaction: takes the pool and runs `execute_scoped` so the RLS fence
-    /// (ADR-0008) applies. The caller wraps this in `with_company_scope(Some(company))`.
+    /// A write outside any transaction: takes the pool and runs `org_scope::execute_scoped` so an
+    /// ambient org scope rides the request-dedicated connection when a composing service's decorator
+    /// has fenced these tables (ADR-0029); with no ambient scope the write is plain.
     ///
     /// Returns the raw `sqlx::Error` deliberately: the caller inspects it for a unique violation to turn
     /// a duplicate asset code into a domain error.
     pub async fn insert_asset(&self, pool: &PgPool, a: &NewAssetRow<'_>) -> Result<(), sqlx::Error> {
-        company_scope::execute_scoped(
+        org_scope::execute_scoped(
             pool,
             sqlx::query(
                 r#"INSERT INTO asset.assets
-                     (id, company_id, asset_category_id, asset_name, asset_code, item_id, branch_id,
+                     (id, asset_category_id, asset_name, asset_code, item_id, branch_id,
                       gross_purchase_amount, salvage_value, opening_accumulated_depreciation,
                       useful_life_months, purchase_date, available_for_use_date,
                       accumulated_depreciation, net_book_value, status)
-                   VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$10,$8-$10,'draft'::asset_status)"#,
+                   VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$9,$7-$9,'draft'::asset_status)"#,
             )
-            .bind(a.id).bind(a.company_id).bind(a.asset_category_id).bind(a.asset_name).bind(a.asset_code)
+            .bind(a.id).bind(a.asset_category_id).bind(a.asset_name).bind(a.asset_code)
             .bind(a.item_id).bind(a.branch_id).bind(a.gross_purchase_amount).bind(a.salvage_value)
             .bind(a.opening_accumulated_depreciation).bind(a.useful_life_months).bind(a.purchase_date)
             .bind(a.available_for_use_date),
@@ -118,15 +116,14 @@ impl AssetRepository {
 
     /// The asset's lifecycle snapshot. `Ok(None)` = not visible in the caller's scope.
     ///
-    /// ID-only read: identified by the asset id alone — no company to scope from up front, so this rides
-    /// the caller's scope (the request-dedicated connection under HTTP, or an event caller's
-    /// `with_company_scope`). RLS fences it: another company's asset is simply not found. Callers read
-    /// `company_id` off the returned row to bind their own tx.
+    /// ID-only read (ADR-0029): identified by the asset id alone, riding the request-dedicated
+    /// connection when an ambient org scope is bound (a composed deployment's fence then refuses an
+    /// out-of-scope asset as zero rows), the plain pool otherwise.
     pub async fn find_snapshot(&self, pool: &PgPool, asset_id: Uuid) -> Result<Option<AssetSnapshotRow>, sqlx::Error> {
-        let row = company_scope::fetch_optional_row_scoped(
+        let row = org_scope::fetch_optional_row_scoped(
             pool,
             sqlx::query(
-                r#"SELECT company_id, asset_category_id, asset_code, gross_purchase_amount, salvage_value,
+                r#"SELECT asset_category_id, asset_code, gross_purchase_amount, salvage_value,
                           useful_life_months, purchase_date, available_for_use_date,
                           accumulated_depreciation, opening_accumulated_depreciation, status::text AS status
                    FROM asset.assets WHERE id=$1 AND (metadata->>'deleted_at') IS NULL"#,
@@ -135,7 +132,6 @@ impl AssetRepository {
         )
         .await?;
         Ok(row.map(|r| AssetSnapshotRow {
-            company_id: r.get("company_id"),
             asset_category_id: r.get("asset_category_id"),
             asset_code: r.get("asset_code"),
             gross_purchase_amount: r.get("gross_purchase_amount"),
@@ -153,7 +149,7 @@ impl AssetRepository {
     /// activated; the acquisition post deduped).
     ///
     /// Takes the CALLER'S connection so the status flip and the schedule inserts commit as one unit. The
-    /// caller binds the asset's company on that connection (`bind_company_on`) — don't re-bind here.
+    /// caller re-binds the ambient org scope on that connection (`relay_ambient_scope`) — don't re-bind here.
     pub async fn claim_activation(
         &self,
         conn: &mut sqlx::PgConnection,
@@ -218,16 +214,16 @@ impl AssetRepository {
     /// between this read and the disposal post — the Dr Accum Dep amount always matches what
     /// depreciation actually credited, and the asset nets off the books (council 2026-07-06).
     ///
-    /// The caller cannot bind a company on that connection before this read: the company is only known
-    /// FROM this row, read under the lock inside that very transaction. The caller binds the ambient
-    /// scope instead — see `dispose_asset`.
+    /// The caller cannot scope that connection by a column of this row before the read: the row's
+    /// identity is only known FROM the read itself, under the lock, inside that very transaction. The
+    /// caller re-binds the ambient org scope instead — see `dispose_asset`.
     pub async fn lock_for_disposal(
         &self,
         conn: &mut sqlx::PgConnection,
         asset_id: Uuid,
     ) -> Result<Option<DisposalLockRow>, sqlx::Error> {
         let row = sqlx::query(
-            r#"SELECT company_id, asset_category_id, asset_code, gross_purchase_amount,
+            r#"SELECT asset_category_id, asset_code, gross_purchase_amount,
                       accumulated_depreciation, status::text AS status
                FROM asset.assets WHERE id=$1 AND (metadata->>'deleted_at') IS NULL FOR UPDATE"#,
         )
@@ -235,7 +231,6 @@ impl AssetRepository {
         .fetch_optional(conn)
         .await?;
         Ok(row.map(|r| DisposalLockRow {
-            company_id: r.get("company_id"),
             asset_category_id: r.get("asset_category_id"),
             asset_code: r.get("asset_code"),
             gross_purchase_amount: r.get("gross_purchase_amount"),

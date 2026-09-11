@@ -5,9 +5,9 @@
 //! not inside `exports/` — so `exports/` stays a pure, decoupled contract surface while
 //! the realization lives next to the other services that depend on infrastructure.
 //!
-//! Reads use the repositories' generic `find_by_id` / `exists`. Under RLS
-//! (`app.company_id`), a read with no company scope set simply sees no rows; a composing
-//! service binds the caller's company onto its connection as usual.
+//! Reads use the repositories' generic `find_by_id` / `exists`. The module is tenant-agnostic
+//! (ADR-0029); on a composed deployment the composing service's decorator fences these reads —
+//! a read with no ambient org scope bound simply sees every row.
 
 use anyhow::Result;
 use async_trait::async_trait;
@@ -123,7 +123,6 @@ impl From<crate::domain::entity::Asset> for AssetDto {
     fn from(a: crate::domain::entity::Asset) -> Self {
         Self {
             id: AssetId(a.id),
-            company_id: a.company_id,
             asset_category_id: a.asset_category_id,
             asset_name: a.asset_name,
             asset_code: a.asset_code,
@@ -147,7 +146,6 @@ impl From<crate::domain::entity::AssetCategory> for AssetCategoryDto {
     fn from(c: crate::domain::entity::AssetCategory) -> Self {
         Self {
             id: AssetCategoryId(c.id),
-            company_id: c.company_id,
             category_name: c.category_name,
             depreciation_method: c.depreciation_method,
             useful_life_months: c.useful_life_months,
@@ -165,7 +163,6 @@ impl From<crate::domain::entity::AssetDepreciationEntry> for AssetDepreciationEn
     fn from(e: crate::domain::entity::AssetDepreciationEntry) -> Self {
         Self {
             id: AssetDepreciationEntryId(e.id),
-            company_id: e.company_id,
             asset_id: e.asset_id,
             period_no: e.period_no,
             schedule_date: e.schedule_date,
