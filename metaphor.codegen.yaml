@@ -11,6 +11,12 @@
 # Add your hand-authored services, handlers, tests, and docs below as you write them.
 
 user_owned:
+  # Hand-written files the audit found undeclared; declared so a schema
+  # regeneration cannot delete them.
+  - "src/application/service/assets_query_service.rs"
+  - "src/presentation/http/asset_lifecycle_handler.rs"
+  - "src/assets_module_ext.rs"
+
   - "src/application/service/asset_events.rs"
   - "src/application/service/asset_gl.rs"
   - "src/application/service/asset_write_service.rs"

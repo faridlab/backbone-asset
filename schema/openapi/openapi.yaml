@@ -7,7 +7,7 @@ info:
     This API provides 11 standard CRUD endpoints for each model.
 
 servers:
-  - url: http://localhost:3000
+  - url: /
     description: Development server
 
 tags:
@@ -19,7 +19,7 @@ tags:
     description: AssetDepreciationEntry management endpoints
 
 paths:
-  /api/v1/asset_categories:
+  /api/v1/asset/asset_categories:
     get:
       tags:
         - AssetCategories
@@ -65,7 +65,7 @@ paths:
         '401':
           $ref: '#/components/responses/Unauthorized'
 
-  /api/v1/asset_categories/{id}:
+  /api/v1/asset/asset_categories/{id}:
     parameters:
       - $ref: '#/components/parameters/IdParam'
 
@@ -137,7 +137,7 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
 
-  /api/v1/asset_categories/bulk:
+  /api/v1/asset/asset_categories/bulk:
     post:
       tags:
         - AssetCategories
@@ -229,7 +229,7 @@ paths:
         '400':
           $ref: '#/components/responses/BadRequest'
 
-  /api/v1/asset_categories/upsert:
+  /api/v1/asset/asset_categories/upsert:
     post:
       tags:
         - AssetCategories
@@ -259,7 +259,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/AssetCategory'
 
-  /api/v1/asset_categories/trash:
+  /api/v1/asset/asset_categories/trash:
     get:
       tags:
         - AssetCategories
@@ -276,7 +276,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/AssetCategoryList'
 
-  /api/v1/asset_categories/{id}/restore:
+  /api/v1/asset/asset_categories/{id}/restore:
     parameters:
       - $ref: '#/components/parameters/IdParam'
     post:
@@ -294,7 +294,7 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
 
-  /api/v1/asset_categories/empty:
+  /api/v1/asset/asset_categories/empty:
     delete:
       tags:
         - AssetCategories
@@ -311,7 +311,7 @@ paths:
                   deleted_count:
                     type: integer
 
-  /api/v1/asset_categories/delete/bulk:
+  /api/v1/asset/asset_categories/delete/bulk:
     post:
       tags:
         - AssetCategories
@@ -331,7 +331,7 @@ paths:
         '400':
           $ref: '#/components/responses/BadRequest'
 
-  /api/v1/asset_categories/restore/bulk:
+  /api/v1/asset/asset_categories/restore/bulk:
     post:
       tags:
         - AssetCategories
@@ -349,7 +349,7 @@ paths:
         '400':
           $ref: '#/components/responses/BadRequest'
 
-  /api/v1/asset_categories/restore/all:
+  /api/v1/asset/asset_categories/restore/all:
     post:
       tags:
         - AssetCategories
@@ -365,7 +365,7 @@ paths:
                 properties:
                   restored: { type: integer }
 
-  /api/v1/asset_categories/trash/bulk:
+  /api/v1/asset/asset_categories/trash/bulk:
     delete:
       tags:
         - AssetCategories
@@ -385,7 +385,7 @@ paths:
         '400':
           $ref: '#/components/responses/BadRequest'
 
-  /api/v1/assets:
+  /api/v1/asset/assets:
     get:
       tags:
         - Assets
@@ -431,7 +431,7 @@ paths:
         '401':
           $ref: '#/components/responses/Unauthorized'
 
-  /api/v1/assets/{id}:
+  /api/v1/asset/assets/{id}:
     parameters:
       - $ref: '#/components/parameters/IdParam'
 
@@ -503,7 +503,7 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
 
-  /api/v1/assets/bulk:
+  /api/v1/asset/assets/bulk:
     post:
       tags:
         - Assets
@@ -595,7 +595,7 @@ paths:
         '400':
           $ref: '#/components/responses/BadRequest'
 
-  /api/v1/assets/upsert:
+  /api/v1/asset/assets/upsert:
     post:
       tags:
         - Assets
@@ -625,7 +625,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/Asset'
 
-  /api/v1/assets/trash:
+  /api/v1/asset/assets/trash:
     get:
       tags:
         - Assets
@@ -642,7 +642,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/AssetList'
 
-  /api/v1/assets/{id}/restore:
+  /api/v1/asset/assets/{id}/restore:
     parameters:
       - $ref: '#/components/parameters/IdParam'
     post:
@@ -660,7 +660,7 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
 
-  /api/v1/assets/empty:
+  /api/v1/asset/assets/empty:
     delete:
       tags:
         - Assets
@@ -677,7 +677,7 @@ paths:
                   deleted_count:
                     type: integer
 
-  /api/v1/assets/delete/bulk:
+  /api/v1/asset/assets/delete/bulk:
     post:
       tags:
         - Assets
@@ -697,7 +697,7 @@ paths:
         '400':
           $ref: '#/components/responses/BadRequest'
 
-  /api/v1/assets/restore/bulk:
+  /api/v1/asset/assets/restore/bulk:
     post:
       tags:
         - Assets
@@ -715,7 +715,7 @@ paths:
         '400':
           $ref: '#/components/responses/BadRequest'
 
-  /api/v1/assets/restore/all:
+  /api/v1/asset/assets/restore/all:
     post:
       tags:
         - Assets
@@ -731,7 +731,7 @@ paths:
                 properties:
                   restored: { type: integer }
 
-  /api/v1/assets/trash/bulk:
+  /api/v1/asset/assets/trash/bulk:
     delete:
       tags:
         - Assets
@@ -751,7 +751,7 @@ paths:
         '400':
           $ref: '#/components/responses/BadRequest'
 
-  /api/v1/asset_depreciation_entries:
+  /api/v1/asset/asset_depreciation_entries:
     get:
       tags:
         - AssetDepreciationEntries
@@ -797,7 +797,7 @@ paths:
         '401':
           $ref: '#/components/responses/Unauthorized'
 
-  /api/v1/asset_depreciation_entries/{id}:
+  /api/v1/asset/asset_depreciation_entries/{id}:
     parameters:
       - $ref: '#/components/parameters/IdParam'
 
@@ -869,7 +869,7 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
 
-  /api/v1/asset_depreciation_entries/bulk:
+  /api/v1/asset/asset_depreciation_entries/bulk:
     post:
       tags:
         - AssetDepreciationEntries
@@ -961,7 +961,7 @@ paths:
         '400':
           $ref: '#/components/responses/BadRequest'
 
-  /api/v1/asset_depreciation_entries/upsert:
+  /api/v1/asset/asset_depreciation_entries/upsert:
     post:
       tags:
         - AssetDepreciationEntries
@@ -991,7 +991,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/AssetDepreciationEntry'
 
-  /api/v1/asset_depreciation_entries/trash:
+  /api/v1/asset/asset_depreciation_entries/trash:
     get:
       tags:
         - AssetDepreciationEntries
@@ -1008,7 +1008,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/AssetDepreciationEntryList'
 
-  /api/v1/asset_depreciation_entries/{id}/restore:
+  /api/v1/asset/asset_depreciation_entries/{id}/restore:
     parameters:
       - $ref: '#/components/parameters/IdParam'
     post:
@@ -1026,7 +1026,7 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
 
-  /api/v1/asset_depreciation_entries/empty:
+  /api/v1/asset/asset_depreciation_entries/empty:
     delete:
       tags:
         - AssetDepreciationEntries
@@ -1043,7 +1043,7 @@ paths:
                   deleted_count:
                     type: integer
 
-  /api/v1/asset_depreciation_entries/delete/bulk:
+  /api/v1/asset/asset_depreciation_entries/delete/bulk:
     post:
       tags:
         - AssetDepreciationEntries
@@ -1063,7 +1063,7 @@ paths:
         '400':
           $ref: '#/components/responses/BadRequest'
 
-  /api/v1/asset_depreciation_entries/restore/bulk:
+  /api/v1/asset/asset_depreciation_entries/restore/bulk:
     post:
       tags:
         - AssetDepreciationEntries
@@ -1081,7 +1081,7 @@ paths:
         '400':
           $ref: '#/components/responses/BadRequest'
 
-  /api/v1/asset_depreciation_entries/restore/all:
+  /api/v1/asset/asset_depreciation_entries/restore/all:
     post:
       tags:
         - AssetDepreciationEntries
@@ -1097,7 +1097,7 @@ paths:
                 properties:
                   restored: { type: integer }
 
-  /api/v1/asset_depreciation_entries/trash/bulk:
+  /api/v1/asset/asset_depreciation_entries/trash/bulk:
     delete:
       tags:
         - AssetDepreciationEntries
