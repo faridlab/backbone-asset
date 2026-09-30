@@ -284,6 +284,8 @@ impl backbone_orm::EntityRepoMeta for Asset {
         m.insert("item_id".to_string(), "uuid".to_string());
         m.insert("branch_id".to_string(), "uuid".to_string());
         m.insert("status".to_string(), "asset_status".to_string());
+        m.insert("purchase_date".to_string(), "timestamptz".to_string());
+        m.insert("available_for_use_date".to_string(), "timestamptz".to_string());
         m
     }
     fn search_fields() -> &'static [&'static str] {

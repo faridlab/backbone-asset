@@ -227,6 +227,8 @@ impl backbone_orm::EntityRepoMeta for AssetDepreciationEntry {
         let mut m = std::collections::HashMap::new();
         m.insert("id".to_string(), "uuid".to_string());
         m.insert("asset_id".to_string(), "uuid".to_string());
+        m.insert("schedule_date".to_string(), "timestamptz".to_string());
+        m.insert("posted_at".to_string(), "timestamptz".to_string());
         m
     }
     fn search_fields() -> &'static [&'static str] {

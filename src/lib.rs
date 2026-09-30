@@ -24,10 +24,6 @@ pub mod application;
 pub mod presentation;
 pub mod seeders;
 pub mod exports;
-// Hand-authored `impl AssetsModule` extension (safe default routes + lifecycle write surface +
-// query contract). Kept OUT of lib.rs's generated impl region so `metaphor make` regen can't
-// clobber it — see assets_module_ext.rs.
-pub mod assets_module_ext;
 
 // Re-exports for convenience - Domain entities
 pub use domain::entity::*;
@@ -129,15 +125,16 @@ impl AssetsModule {
             .merge(create_asset_read_routes(self.asset_service.clone()))
             .merge(create_asset_depreciation_entry_read_routes(self.asset_depreciation_entry_service.clone()))
     }
+
+    // <<< CUSTOM METHODS
+    gl_sink: Option<Arc<dyn GlPostSink>>,
+    event_sink: Option<Arc<dyn AssetEventSink>>,
+    // END CUSTOM
 }
 
 /// Builder for AssetsModule
 pub struct AssetsModuleBuilder {
     db_pool: Option<PgPool>,
-    // <<< CUSTOM
-    gl_sink: Option<Arc<dyn GlPostSink>>,
-    event_sink: Option<Arc<dyn AssetEventSink>>,
-    // END CUSTOM
 }
 
 impl AssetsModuleBuilder {
@@ -145,10 +142,6 @@ impl AssetsModuleBuilder {
     pub fn new() -> Self {
         Self {
             db_pool: None,
-            // <<< CUSTOM
-            gl_sink: None,
-            event_sink: None,
-            // END CUSTOM
         }
     }
 
@@ -203,6 +196,10 @@ impl AssetsModuleBuilder {
             asset_category_service,
             asset_service,
             asset_depreciation_entry_service,
+            // <<< CUSTOM
+            gl_sink: None,
+            event_sink: None,
+            // END CUSTOM
             // <<< CUSTOM
             asset_write_service,
             gl_sink: self.gl_sink,

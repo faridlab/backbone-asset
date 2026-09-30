@@ -11,7 +11,6 @@ pub mod asset_api_test;
 pub mod asset_depreciation_entry_api_test;
 
 // Re-exports for convenience
-pub use crud_test_base::*;
 pub use asset_category_api_test::*;
 pub use asset_api_test::*;
 pub use asset_depreciation_entry_api_test::*;
