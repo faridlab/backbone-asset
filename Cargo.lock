@@ -245,7 +245,7 @@ dependencies = [
 
 [[package]]
 name = "backbone-asset"
-version = "0.5.21"
+version = "0.5.22"
 dependencies = [
  "anyhow",
  "async-trait",

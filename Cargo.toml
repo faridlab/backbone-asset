@@ -1,8 +1,8 @@
 [package]
 name = "backbone-asset"
-version = "0.5.21"
+version = "0.5.22"
 edition = "2021"
-description = "Minimal Backbone Framework module skeleton"
+description = "Fixed-asset register: categories with depreciation policy, capitalization, depreciation schedules and disposal, posting to the ledger through a GL port"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/faridlab/backbone-asset"
 exclude = [".claude/", ".github/", "graphify-out/"]
