@@ -9,7 +9,7 @@
 # (see backbone-sapiens, backbone-bucket). Do not remove it.
 # =============================================================================
 
-module: asset
+module: assets
 version: 2
 schema: asset
 description: "assets domain module"
