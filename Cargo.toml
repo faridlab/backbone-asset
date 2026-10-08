@@ -1,6 +1,6 @@
 [package]
 name = "backbone-asset"
-version = "0.5.22"
+version = "0.6.0"
 edition = "2021"
 description = "Fixed-asset register: categories with depreciation policy, capitalization, depreciation schedules and disposal, posting to the ledger through a GL port"
 license = "MIT OR Apache-2.0"
@@ -20,10 +20,10 @@ path = "src/lib.rs"
 # or `rev = "<commit-sha>"`. Cargo dedupes the git fetch — the repo is only
 # cloned once even though four crates reference it.
 # -----------------------------------------------------------------------------
-backbone-core = { version = "2.7.35", features = ["postgres"] }
-backbone-orm = { version = "2.7.35" }
-backbone-auth = { version = "2.7.35", features = ["axum"] }
-backbone-messaging = { version = "2.7.35" }
+backbone-core = { version = "3.0.0", features = ["postgres"] }
+backbone-orm = { version = "3.0.0" }
+backbone-auth = { version = "3.0.0", features = ["axum"] }
+backbone-messaging = { version = "3.0.0" }
 
 # Core async runtime and serialization
 tokio = { version = "1.0", features = ["full"] }
@@ -96,4 +96,4 @@ rand = "0.8"
 # TEST-ONLY edge: the asset lifecycle emits capitalization/depreciation/disposal posts into the REAL
 # backbone-accounting ledger via an in-test ACL adapter (GlPostSink). Dev-dependency ONLY — the shipped
 # library has ZERO normal Cargo edge to accounting.
-backbone-accounting = "0.9.27"
+backbone-accounting = "0.10.0"

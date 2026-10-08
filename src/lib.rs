@@ -131,6 +131,9 @@ impl AssetsModule {
             .merge(create_asset_read_routes(self.asset_service.clone()))
             .merge(create_asset_depreciation_entry_read_routes(self.asset_depreciation_entry_service.clone()))
     }
+
+    // <<< CUSTOM METHODS
+    // END CUSTOM
 }
 
 /// Builder for AssetsModule
