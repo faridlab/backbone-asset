@@ -136,7 +136,7 @@ impl AssetsModule {
 /// Builder for AssetsModule
 pub struct AssetsModuleBuilder {
     db_pool: Option<PgPool>,
-    // <<< CUSTOM
+    // <<< CUSTOM BUILDER FIELDS
     gl_sink: Option<Arc<dyn GlPostSink>>,
     event_sink: Option<Arc<dyn AssetEventSink>>,
     // END CUSTOM
@@ -147,7 +147,7 @@ impl AssetsModuleBuilder {
     pub fn new() -> Self {
         Self {
             db_pool: None,
-            // <<< CUSTOM
+            // <<< CUSTOM BUILDER DEFAULTS
             gl_sink: None,
             event_sink: None,
             // END CUSTOM
