@@ -133,7 +133,6 @@ pub struct AssetWriteService {
 
 pub(super) struct Cat {
     pub(super) method: String,
-    pub(super) useful_life_months: i32,
     pub(super) fixed_asset: Uuid,
     pub(super) accum_dep: Uuid,
     pub(super) dep_expense: Uuid,
@@ -148,7 +147,6 @@ pub(super) struct AssetRow {
     pub(super) useful_life_months: i32,
     pub(super) purchase_date: chrono::DateTime<chrono::Utc>,
     pub(super) available: Option<chrono::DateTime<chrono::Utc>>,
-    pub(super) accumulated: Decimal,
     pub(super) opening: Decimal,
     pub(super) status: String,
 }
@@ -245,7 +243,6 @@ impl AssetWriteService {
             .ok_or(AssetError::NotFound("asset category"))?;
         Ok(Cat {
             method: r.method,
-            useful_life_months: r.useful_life_months,
             fixed_asset: r.fixed_asset_account_id,
             accum_dep: r.accumulated_depreciation_account_id,
             dep_expense: r.depreciation_expense_account_id,
@@ -270,7 +267,6 @@ impl AssetWriteService {
             useful_life_months: r.useful_life_months,
             purchase_date: r.purchase_date,
             available: r.available_for_use_date,
-            accumulated: r.accumulated_depreciation,
             opening: r.opening_accumulated_depreciation,
             status: r.status,
         })
