@@ -10,7 +10,6 @@ pub mod asset_handler;
 pub mod asset_depreciation_entry_handler;
 
 // <<< CUSTOM
-pub mod asset_lifecycle_handler;
 // END CUSTOM
 
 // Re-exports
@@ -18,5 +17,7 @@ pub use asset_category_handler::{create_asset_category_routes, create_asset_cate
 pub use asset_handler::{create_asset_routes, create_asset_read_routes, create_asset_write_routes};
 pub use asset_depreciation_entry_handler::{create_asset_depreciation_entry_routes, create_asset_depreciation_entry_read_routes, create_asset_depreciation_entry_write_routes};
 // <<< CUSTOM
-pub use asset_lifecycle_handler::{create_asset_lifecycle_routes, AssetLifecycleState};
 // END CUSTOM
+
+// This directory's extension (hand-written; ADR-0031).
+include!("mod.ext.rs");

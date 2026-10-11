@@ -25,11 +25,17 @@ pub mod presentation;
 pub mod seeders;
 pub mod exports;
 // <<< CUSTOM MODULES
-// Hand-authored `impl AssetsModule` extension (safe default routes + lifecycle write surface +
-// query contract). Kept OUT of lib.rs's generated impl region so `metaphor make` regen can't
-// clobber it — see assets_module_ext.rs.
-pub mod assets_module_ext;
 // END CUSTOM
+
+// The module's extension (hand-written; ADR-0031).
+#[path = "lib.ext.rs"]
+mod lib_ext;
+pub use lib_ext::*;
+/// This crate's module and builder under fixed names, for the extension's `impl` blocks.
+#[allow(dead_code)]
+pub(crate) type ThisModule = AssetsModule;
+#[allow(dead_code)]
+pub(crate) type ThisModuleBuilder = AssetsModuleBuilder;
 
 // Re-exports for convenience - Domain entities
 pub use domain::entity::*;
@@ -42,17 +48,10 @@ pub use application::service::AssetCategoryService;
 pub use application::service::AssetService;
 pub use application::service::AssetDepreciationEntryService;
 
-// <<< CUSTOM
-pub use application::service::{AssetEventSink, AssetWriteService, AssetsQueryServiceImpl, GlPostSink, LoggingSink};
-// END CUSTOM
 use std::sync::Arc;
 use axum::Router;
 use sqlx::PgPool;
 
-// <<< CUSTOM
-use exports::AssetsQueryService;
-use presentation::http::{create_asset_lifecycle_routes, AssetLifecycleState};
-// END CUSTOM
 /// Assets module configuration
 ///
 /// Use the builder pattern to configure and register this module:
@@ -69,15 +68,35 @@ pub struct AssetsModule {
     pub(crate) asset_category_service: Arc<AssetCategoryService>,
     pub(crate) asset_service: Arc<AssetService>,
     pub(crate) asset_depreciation_entry_service: Arc<AssetDepreciationEntryService>,
+    /// The module's extension state (`lib.ext.rs`); its fields read through `Deref`.
+    pub(crate) ext: ModuleExt,
     // <<< CUSTOM FIELDS
-    /// The validated, GL-backed lifecycle engine (activate / depreciate / dispose).
-    pub(crate) asset_write_service: Arc<AssetWriteService>,
-    /// The GL-posting sink a composing service supplies; required to mount lifecycle routes.
-    pub(crate) gl_sink: Option<Arc<dyn GlPostSink>>,
-    pub(crate) event_sink: Arc<dyn AssetEventSink>,
-    /// The implemented published read contract for sibling modules.
-    pub(crate) query: Arc<dyn AssetsQueryService>,
     // END CUSTOM
+}
+
+impl std::ops::Deref for AssetsModule {
+    type Target = ModuleExt;
+    fn deref(&self) -> &Self::Target {
+        &self.ext
+    }
+}
+
+impl std::ops::DerefMut for AssetsModule {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.ext
+    }
+}
+
+/// What the extension's `build` hook receives from the generated build (ADR-0031).
+#[allow(dead_code)]
+pub(crate) struct ModuleParts<'a> {
+    pub(crate) db_pool: &'a PgPool,
+    pub(crate) asset_category_service: &'a Arc<AssetCategoryService>,
+    pub(crate) asset_category_repository: &'a Arc<AssetCategoryRepository>,
+    pub(crate) asset_service: &'a Arc<AssetService>,
+    pub(crate) asset_repository: &'a Arc<AssetRepository>,
+    pub(crate) asset_depreciation_entry_service: &'a Arc<AssetDepreciationEntryService>,
+    pub(crate) asset_depreciation_entry_repository: &'a Arc<AssetDepreciationEntryRepository>,
 }
 
 impl AssetsModule {
@@ -139,10 +158,23 @@ impl AssetsModule {
 /// Builder for AssetsModule
 pub struct AssetsModuleBuilder {
     db_pool: Option<PgPool>,
+    /// The builder's extension state (`lib.ext.rs`); its fields read through `Deref`.
+    ext: ModuleBuilderExt,
     // <<< CUSTOM BUILDER FIELDS
-    gl_sink: Option<Arc<dyn GlPostSink>>,
-    event_sink: Option<Arc<dyn AssetEventSink>>,
     // END CUSTOM
+}
+
+impl std::ops::Deref for AssetsModuleBuilder {
+    type Target = ModuleBuilderExt;
+    fn deref(&self) -> &Self::Target {
+        &self.ext
+    }
+}
+
+impl std::ops::DerefMut for AssetsModuleBuilder {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.ext
+    }
 }
 
 impl AssetsModuleBuilder {
@@ -150,9 +182,8 @@ impl AssetsModuleBuilder {
     pub fn new() -> Self {
         Self {
             db_pool: None,
+            ext: Default::default(),
             // <<< CUSTOM BUILDER DEFAULTS
-            gl_sink: None,
-            event_sink: None,
             // END CUSTOM
         }
     }
@@ -164,19 +195,6 @@ impl AssetsModuleBuilder {
     }
 
     // <<< CUSTOM - custom builder methods
-    /// Supply the GL-posting sink the lifecycle verbs post through (required to mount
-    /// [`AssetsModule::lifecycle_routes`]). Assets owns no ledger, so a composing service
-    /// adapts its accounting `PostingService` to [`GlPostSink`].
-    pub fn with_gl_sink(mut self, sink: Arc<dyn GlPostSink>) -> Self {
-        self.gl_sink = Some(sink);
-        self
-    }
-
-    /// Supply the domain-event sink. Defaults to a logging sink if unset.
-    pub fn with_event_sink(mut self, sink: Arc<dyn AssetEventSink>) -> Self {
-        self.event_sink = Some(sink);
-        self
-    }
     // END CUSTOM
 
     /// Build the module with configured dependencies
@@ -197,22 +215,25 @@ impl AssetsModuleBuilder {
         let asset_depreciation_entry_service = Arc::new(AssetDepreciationEntryService::with_repository(asset_depreciation_entry_repository.clone()));
 
         // <<< CUSTOM
-        let asset_write_service = Arc::new(AssetWriteService::new(db_pool.clone()));
-        let event_sink: Arc<dyn AssetEventSink> =
-            self.event_sink.unwrap_or_else(|| Arc::new(LoggingSink));
-        let query: Arc<dyn AssetsQueryService> =
-            Arc::new(AssetsQueryServiceImpl::new(db_pool.clone()));
         // END CUSTOM
+
+        // The extension builds its own state from what the generated build made.
+        let ext = self.ext.build(&ModuleParts {
+            db_pool: &db_pool,
+            asset_category_service: &asset_category_service,
+            asset_category_repository: &asset_category_repository,
+            asset_service: &asset_service,
+            asset_repository: &asset_repository,
+            asset_depreciation_entry_service: &asset_depreciation_entry_service,
+            asset_depreciation_entry_repository: &asset_depreciation_entry_repository,
+        })?;
 
         Ok(AssetsModule {
             asset_category_service,
             asset_service,
             asset_depreciation_entry_service,
+            ext,
             // <<< CUSTOM
-            asset_write_service,
-            gl_sink: self.gl_sink,
-            event_sink,
-            query,
             // END CUSTOM
         })
     }
@@ -223,3 +244,6 @@ impl Default for AssetsModuleBuilder {
         Self::new()
     }
 }
+
+// This directory's extension (hand-written; ADR-0031).
+include!("mod.ext.rs");
