@@ -300,7 +300,7 @@ impl backbone_core::ApplyUpdateDto<UpdateAssetDepreciationEntryDto> for AssetDep
 // Custom DTOs
 // =============================================================================
 
-// <<< CUSTOM DTOs
 // Add custom DTOs specific to AssetDepreciationEntry here.
 // This section will be preserved during regeneration.
 // >>> END CUSTOM DTOs
+

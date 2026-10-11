@@ -13,5 +13,3 @@ pub use asset_category_validator::{AssetCategoryValidator, asset_category_valida
 pub use asset_validator::{AssetValidator, asset_validator};
 pub use asset_depreciation_entry_validator::{AssetDepreciationEntryValidator, asset_depreciation_entry_validator};
 
-// <<< CUSTOM
-// END CUSTOM

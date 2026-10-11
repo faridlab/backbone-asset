@@ -16,9 +16,5 @@ pub type AssetCategoryValidator = EntityValidator<AssetCategory>;
 pub fn asset_category_validator() -> AssetCategoryValidator {
     EntityValidator::new()
         .rule(RequiredString::new("category_name", |e: &AssetCategory| &e.category_name))
-    // <<< CUSTOM RULES
-    // END CUSTOM RULES
 }
 
-// <<< CUSTOM
-// END CUSTOM

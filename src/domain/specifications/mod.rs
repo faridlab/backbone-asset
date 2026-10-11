@@ -10,5 +10,3 @@ pub mod asset_category_specification;
 pub mod asset_specification;
 pub mod asset_depreciation_entry_specification;
 
-// <<< CUSTOM
-// END CUSTOM

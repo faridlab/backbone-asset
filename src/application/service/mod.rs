@@ -11,14 +11,10 @@ pub mod asset_category_service;
 pub mod asset_service;
 pub mod asset_depreciation_entry_service;
 
-// <<< CUSTOM
-// END CUSTOM
 
 pub use asset_category_service::AssetCategoryService;
 pub use asset_service::AssetService;
 pub use asset_depreciation_entry_service::AssetDepreciationEntryService;
-// <<< CUSTOM
-// END CUSTOM
 
 // This directory's extension (hand-written; ADR-0031).
 include!("mod.ext.rs");

@@ -18,5 +18,3 @@ use crate::domain::entity::AssetDepreciationEntry;
 /// service. `PermitAllPolicy` is the safe default until then.
 pub type AssetDepreciationEntryDomainPolicy = PermitAllPolicy<AssetDepreciationEntry>;
 
-// <<< CUSTOM
-// END CUSTOM

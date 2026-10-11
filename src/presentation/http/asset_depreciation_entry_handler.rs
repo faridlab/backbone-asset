@@ -188,3 +188,4 @@ pub fn create_protected_asset_depreciation_entry_routes<A: AuthMiddleware + Send
             }
         }))
 }
+

@@ -18,5 +18,3 @@ use crate::domain::entity::AssetCategory;
 /// service. `PermitAllPolicy` is the safe default until then.
 pub type AssetCategoryDomainPolicy = PermitAllPolicy<AssetCategory>;
 
-// <<< CUSTOM
-// END CUSTOM

@@ -179,8 +179,6 @@ impl AssetCategory {
         }
     }
 
-    // <<< CUSTOM METHODS START >>>
-    // <<< CUSTOM METHODS END >>>
 }
 
 impl super::Entity for AssetCategory {

@@ -16,5 +16,3 @@ pub use asset_event_handlers::AssetEventHandler;
 pub use asset_depreciation_entry_events::{AssetDepreciationEntryEvent, AssetDepreciationEntryEventPublisher, NoopAssetDepreciationEntryEventPublisher};
 pub use asset_depreciation_entry_event_handlers::AssetDepreciationEntryEventHandler;
 
-// <<< CUSTOM
-// END CUSTOM

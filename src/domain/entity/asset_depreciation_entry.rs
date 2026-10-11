@@ -177,8 +177,6 @@ impl AssetDepreciationEntry {
         }
     }
 
-    // <<< CUSTOM METHODS START >>>
-    // <<< CUSTOM METHODS END >>>
 }
 
 impl super::Entity for AssetDepreciationEntry {

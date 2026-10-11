@@ -11,8 +11,6 @@ use crate::domain::entity::AssetDepreciationEntry;
 /// enum containing a `Crud(CrudEvent<AssetDepreciationEntry>)` variant.
 pub type AssetDepreciationEntryEvent = CrudEvent<AssetDepreciationEntry>;
 
-// <<< CUSTOM
-// END CUSTOM
 
 use backbone_messaging::{CrudEventPublisher, NoOpCrudEventPublisher};
 use std::sync::Arc;

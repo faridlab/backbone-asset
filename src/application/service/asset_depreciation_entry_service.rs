@@ -32,5 +32,3 @@ pub type AssetDepreciationEntryService = GenericCrudService<
     AssetDepreciationEntryRepository,
 >;
 
-// <<< CUSTOM
-// END CUSTOM

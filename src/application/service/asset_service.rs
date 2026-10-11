@@ -32,5 +32,3 @@ pub type AssetService = GenericCrudService<
     AssetRepository,
 >;
 
-// <<< CUSTOM
-// END CUSTOM

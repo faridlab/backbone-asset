@@ -1,0 +1,45 @@
+//! The extension of `services.rs` (hand-written; ADR-0031).
+
+#[allow(unused_imports)]
+use super::*;
+
+// The read-only query port siblings consume. Hand-authored here (inside the marker) because the
+// generator emits only this stub section; the trait itself is module API, not schema-derived.
+use anyhow::Result;
+use async_trait::async_trait;
+
+use super::super::types::*;
+
+/// Public query service for Assets module
+///
+/// This trait defines read-only operations that other modules can use.
+/// Implementations should NOT expose internal domain logic.
+#[async_trait]
+pub trait AssetsQueryService: Send + Sync {
+    /// Get AssetCategory by ID
+    async fn get_asset_category(&self, id: AssetCategoryId) -> Result<Option<AssetCategoryDto>>;
+
+    /// Get AssetCategory summary by ID
+    async fn get_asset_category_summary(&self, id: AssetCategoryId) -> Result<Option<AssetCategorySummary>>;
+
+    /// Check if AssetCategory exists
+    async fn asset_category_exists(&self, id: AssetCategoryId) -> Result<bool>;
+
+    /// Get Asset by ID
+    async fn get_asset(&self, id: AssetId) -> Result<Option<AssetDto>>;
+
+    /// Get Asset summary by ID
+    async fn get_asset_summary(&self, id: AssetId) -> Result<Option<AssetSummary>>;
+
+    /// Check if Asset exists
+    async fn asset_exists(&self, id: AssetId) -> Result<bool>;
+
+    /// Get AssetDepreciationEntry by ID
+    async fn get_asset_depreciation_entry(&self, id: AssetDepreciationEntryId) -> Result<Option<AssetDepreciationEntryDto>>;
+
+    /// Get AssetDepreciationEntry summary by ID
+    async fn get_asset_depreciation_entry_summary(&self, id: AssetDepreciationEntryId) -> Result<Option<AssetDepreciationEntrySummary>>;
+
+    /// Check if AssetDepreciationEntry exists
+    async fn asset_depreciation_entry_exists(&self, id: AssetDepreciationEntryId) -> Result<bool>;
+}

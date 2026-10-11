@@ -323,7 +323,7 @@ impl backbone_core::ApplyUpdateDto<UpdateAssetCategoryDto> for AssetCategory {
 // Custom DTOs
 // =============================================================================
 
-// <<< CUSTOM DTOs
 // Add custom DTOs specific to AssetCategory here.
 // This section will be preserved during regeneration.
 // >>> END CUSTOM DTOs
+

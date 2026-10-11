@@ -17,9 +17,5 @@ pub fn asset_validator() -> AssetValidator {
     EntityValidator::new()
         .rule(RequiredString::new("asset_name", |e: &Asset| &e.asset_name))
         .rule(RequiredString::new("asset_code", |e: &Asset| &e.asset_code))
-    // <<< CUSTOM RULES
-    // END CUSTOM RULES
 }
 
-// <<< CUSTOM
-// END CUSTOM

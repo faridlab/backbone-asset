@@ -32,5 +32,3 @@ pub type AssetCategoryService = GenericCrudService<
     AssetCategoryRepository,
 >;
 
-// <<< CUSTOM
-// END CUSTOM

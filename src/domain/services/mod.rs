@@ -10,5 +10,3 @@ pub use asset_category_domain_policy::AssetCategoryDomainPolicy;
 pub use asset_domain_policy::AssetDomainPolicy;
 pub use asset_depreciation_entry_domain_policy::AssetDepreciationEntryDomainPolicy;
 
-// <<< CUSTOM
-// END CUSTOM
