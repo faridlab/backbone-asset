@@ -56,7 +56,7 @@ impl backbone_core::write_guard::WriteGuard<AssetCategory> for AssetCategoryRowR
         };
         let row = &row;
         let old = ctx.before.and_then(|b| serde_json::to_value(b).ok());
-        let mut shadow = Vec::new();
+        let shadow = Vec::new();
         let mut refuse = Vec::new();
         // `category_name_required` (@required on AssetCategory.category_name)
         if (create || (update && r::changed(old.as_ref(), row, &["category_name"]))) && !r::holds(&r::and(r::is_not_null(r::field(row, "category_name")), r::not(r::is_empty(r::trim(r::field(row, "category_name")))))) {
@@ -64,11 +64,11 @@ impl backbone_core::write_guard::WriteGuard<AssetCategory> for AssetCategoryRowR
         }
         // `category_name_max_length` (@max(140) on AssetCategory.category_name)
         if (create || (update && r::changed(old.as_ref(), row, &["category_name"]))) && !r::holds(&r::le(r::length(r::field(row, "category_name")), r::Val::Num(140.0_f64))) {
-            shadow.push(Violation::new("category_name", "max_length", "category_name must be at most 140 characters").with_param("max", 140_i64));
+            refuse.push(Violation::new("category_name", "max_length", "category_name must be at most 140 characters").with_param("max", 140_i64));
         }
         // `useful_life_months_positive` (@positive on AssetCategory.useful_life_months)
         if (create || (update && r::changed(old.as_ref(), row, &["useful_life_months"]))) && !r::holds(&r::gt(r::field(row, "useful_life_months"), r::Val::Num(0.0_f64))) {
-            shadow.push(Violation::new("useful_life_months", "positive", "useful_life_months must be positive"));
+            refuse.push(Violation::new("useful_life_months", "positive", "useful_life_months must be positive"));
         }
         // `fixed_asset_account_id_required` (@required on AssetCategory.fixed_asset_account_id)
         if (create || (update && r::changed(old.as_ref(), row, &["fixed_asset_account_id"]))) && !r::holds(&r::and(r::is_not_null(r::field(row, "fixed_asset_account_id")), r::not(r::is_empty(r::trim(r::field(row, "fixed_asset_account_id")))))) {
