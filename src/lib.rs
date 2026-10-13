@@ -192,15 +192,15 @@ impl AssetsModuleBuilder {
 
         // AssetCategory service
         let asset_category_repository = Arc::new(AssetCategoryRepository::new(db_pool.clone()));
-        let asset_category_service = Arc::new(AssetCategoryService::with_repository(asset_category_repository.clone()));
+        let asset_category_service = Arc::new(AssetCategoryService::with_repository(asset_category_repository.clone()).with_guard(Arc::new(crate::application::service::AssetCategoryRowRules)));
 
         // Asset service
         let asset_repository = Arc::new(AssetRepository::new(db_pool.clone()));
-        let asset_service = Arc::new(AssetService::with_repository(asset_repository.clone()));
+        let asset_service = Arc::new(AssetService::with_repository(asset_repository.clone()).with_guard(Arc::new(crate::application::service::AssetRowRules)));
 
         // AssetDepreciationEntry service
         let asset_depreciation_entry_repository = Arc::new(AssetDepreciationEntryRepository::new(db_pool.clone()));
-        let asset_depreciation_entry_service = Arc::new(AssetDepreciationEntryService::with_repository(asset_depreciation_entry_repository.clone()));
+        let asset_depreciation_entry_service = Arc::new(AssetDepreciationEntryService::with_repository(asset_depreciation_entry_repository.clone()).with_guard(Arc::new(crate::application::service::AssetDepreciationEntryRowRules)));
 
 
         // The extension builds its own state from what the generated build made.

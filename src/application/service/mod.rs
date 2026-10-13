@@ -15,6 +15,9 @@ pub mod asset_depreciation_entry_service;
 pub use asset_category_service::AssetCategoryService;
 pub use asset_service::AssetService;
 pub use asset_depreciation_entry_service::AssetDepreciationEntryService;
+pub use asset_category_service::AssetCategoryRowRules;
+pub use asset_service::AssetRowRules;
+pub use asset_depreciation_entry_service::AssetDepreciationEntryRowRules;
 
 // This directory's extension (hand-written; ADR-0031).
 include!("mod.ext.rs");

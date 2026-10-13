@@ -32,3 +32,73 @@ pub type AssetService = GenericCrudService<
     AssetRepository,
 >;
 
+/// The rules the schema declares for Asset, checked against the row a create or update
+/// would store. The generated build attaches it to [`AssetService`]. A refusing rule's
+/// break answers 422; a rule in shadow is logged under `backbone::write_guard` and the
+/// write goes ahead.
+pub struct AssetRowRules;
+
+#[async_trait::async_trait]
+impl backbone_core::write_guard::WriteGuard<Asset> for AssetRowRules {
+    async fn check(
+        &self,
+        ctx: &backbone_core::write_guard::WriteCtx<'_, Asset>,
+    ) -> backbone_core::write_guard::GuardOutcome {
+        use backbone_core::row_rule as r;
+        use backbone_core::violation::Violation;
+        use backbone_core::write_guard::{GuardOutcome, WriteKind};
+        let (create, update) = (ctx.kind == WriteKind::Create, ctx.kind == WriteKind::Update);
+        let Some(after) = ctx.after.filter(|_| create || update) else {
+            return GuardOutcome::allow();
+        };
+        let Ok(row) = serde_json::to_value(after) else {
+            return GuardOutcome::allow();
+        };
+        let row = &row;
+        let old = ctx.before.and_then(|b| serde_json::to_value(b).ok());
+        let mut shadow = Vec::new();
+        let mut refuse = Vec::new();
+        // `asset_category_id_required` (@required on Asset.asset_category_id)
+        if (create || (update && r::changed(old.as_ref(), row, &["asset_category_id"]))) && !r::holds(&r::and(r::is_not_null(r::field(row, "asset_category_id")), r::not(r::is_empty(r::trim(r::field(row, "asset_category_id")))))) {
+            refuse.push(Violation::new("asset_category_id", "required", "asset_category_id is required"));
+        }
+        // `asset_name_required` (@required on Asset.asset_name)
+        if (create || (update && r::changed(old.as_ref(), row, &["asset_name"]))) && !r::holds(&r::and(r::is_not_null(r::field(row, "asset_name")), r::not(r::is_empty(r::trim(r::field(row, "asset_name")))))) {
+            refuse.push(Violation::new("asset_name", "required", "asset_name is required"));
+        }
+        // `asset_name_max_length` (@max(140) on Asset.asset_name)
+        if (create || (update && r::changed(old.as_ref(), row, &["asset_name"]))) && !r::holds(&r::le(r::length(r::field(row, "asset_name")), r::Val::Num(140.0_f64))) {
+            shadow.push(Violation::new("asset_name", "max_length", "asset_name must be at most 140 characters").with_param("max", 140_i64));
+        }
+        // `asset_code_required` (@required on Asset.asset_code)
+        if (create || (update && r::changed(old.as_ref(), row, &["asset_code"]))) && !r::holds(&r::and(r::is_not_null(r::field(row, "asset_code")), r::not(r::is_empty(r::trim(r::field(row, "asset_code")))))) {
+            refuse.push(Violation::new("asset_code", "required", "asset_code is required"));
+        }
+        // `asset_code_max_length` (@max(40) on Asset.asset_code)
+        if (create || (update && r::changed(old.as_ref(), row, &["asset_code"]))) && !r::holds(&r::le(r::length(r::field(row, "asset_code")), r::Val::Num(40.0_f64))) {
+            shadow.push(Violation::new("asset_code", "max_length", "asset_code must be at most 40 characters").with_param("max", 40_i64));
+        }
+        // `gross_purchase_amount_positive` (@positive on Asset.gross_purchase_amount)
+        if (create || (update && r::changed(old.as_ref(), row, &["gross_purchase_amount"]))) && !r::holds(&r::gt(r::field(row, "gross_purchase_amount"), r::Val::Num(0.0_f64))) {
+            shadow.push(Violation::new("gross_purchase_amount", "positive", "gross_purchase_amount must be positive"));
+        }
+        // `salvage_value_non_negative` (@non_negative on Asset.salvage_value)
+        if (create || (update && r::changed(old.as_ref(), row, &["salvage_value"]))) && !r::holds(&r::ge(r::field(row, "salvage_value"), r::Val::Num(0.0_f64))) {
+            shadow.push(Violation::new("salvage_value", "non_negative", "salvage_value must not be negative"));
+        }
+        // `useful_life_months_positive` (@positive on Asset.useful_life_months)
+        if (create || (update && r::changed(old.as_ref(), row, &["useful_life_months"]))) && !r::holds(&r::gt(r::field(row, "useful_life_months"), r::Val::Num(0.0_f64))) {
+            shadow.push(Violation::new("useful_life_months", "positive", "useful_life_months must be positive"));
+        }
+        // `opening_accumulated_depreciation_non_negative` (@non_negative on Asset.opening_accumulated_depreciation)
+        if (create || (update && r::changed(old.as_ref(), row, &["opening_accumulated_depreciation"]))) && !r::holds(&r::ge(r::field(row, "opening_accumulated_depreciation"), r::Val::Num(0.0_f64))) {
+            shadow.push(Violation::new("opening_accumulated_depreciation", "non_negative", "opening_accumulated_depreciation must not be negative"));
+        }
+        // `accumulated_depreciation_non_negative` (@non_negative on Asset.accumulated_depreciation)
+        if (create || (update && r::changed(old.as_ref(), row, &["accumulated_depreciation"]))) && !r::holds(&r::ge(r::field(row, "accumulated_depreciation"), r::Val::Num(0.0_f64))) {
+            shadow.push(Violation::new("accumulated_depreciation", "non_negative", "accumulated_depreciation must not be negative"));
+        }
+        GuardOutcome { refuse, shadow }
+    }
+}
+
