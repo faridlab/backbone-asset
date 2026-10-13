@@ -232,6 +232,9 @@ impl backbone_orm::EntityRepoMeta for AssetDepreciationEntry {
     fn search_fields() -> &'static [&'static str] {
         &[]
     }
+    fn relations() -> &'static [(&'static str, &'static str, &'static str)] {
+        &[("asset", "assets", "assetId")]
+    }
 }
 
 /// Builder for AssetDepreciationEntry entity
