@@ -19,5 +19,29 @@ pub use asset_category_service::AssetCategoryRowRules;
 pub use asset_service::AssetRowRules;
 pub use asset_depreciation_entry_service::AssetDepreciationEntryRowRules;
 
+/// A `AssetCategoryService` over `repository` with its write guard attached: the way to build it, so its writes are
+/// served only with the rules the schema declares.
+pub fn build_asset_category_service(
+    repository: std::sync::Arc<crate::infrastructure::persistence::AssetCategoryRepository>,
+) -> AssetCategoryService {
+    AssetCategoryService::with_repository(repository).with_guard(std::sync::Arc::new(AssetCategoryRowRules))
+}
+
+/// A `AssetService` over `repository` with its write guard attached: the way to build it, so its writes are
+/// served only with the rules the schema declares.
+pub fn build_asset_service(
+    repository: std::sync::Arc<crate::infrastructure::persistence::AssetRepository>,
+) -> AssetService {
+    AssetService::with_repository(repository).with_guard(std::sync::Arc::new(AssetRowRules))
+}
+
+/// A `AssetDepreciationEntryService` over `repository` with its write guard attached: the way to build it, so its writes are
+/// served only with the rules the schema declares.
+pub fn build_asset_depreciation_entry_service(
+    repository: std::sync::Arc<crate::infrastructure::persistence::AssetDepreciationEntryRepository>,
+) -> AssetDepreciationEntryService {
+    AssetDepreciationEntryService::with_repository(repository).with_guard(std::sync::Arc::new(AssetDepreciationEntryRowRules))
+}
+
 // This directory's extension (hand-written; ADR-0031).
 include!("mod.ext.rs");
